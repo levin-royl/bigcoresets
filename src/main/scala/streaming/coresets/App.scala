@@ -24,8 +24,6 @@ import org.apache.spark.mllib.linalg.distributed.RowMatrix
 case class Params(
   verbose: Boolean = false,
   
-  centerPathSuffix: String = "",
-  
   denseData: Boolean = false,
 
   alg: String = "",
@@ -33,10 +31,12 @@ case class Params(
   batchSecs: Int = 10,
   
   parallelism: Int =  16,
-  
-  rootPath: String = System.getProperty("user.home"),
 
   input: String = "",
+  
+  output: String = "",
+  
+  checkpointDir: String = "",
   
   mode: String = "",
 
@@ -153,13 +153,9 @@ object App extends Serializable {
         (_, c) => c.copy(denseData = true)
       } text ("vector data is dense rather than sparse")
       
-      opt[String]("centerPathSuffix") required () action {
-        (x, c) => c.copy(centerPathSuffix = x)
-      } text("the suffix of the path to use for output centers RDD")
-      
       opt[String]('a', "algorithm") required () action {
         (x, c) => c.copy(alg = x)
-      } text ("supported algorithms are spark-kmeans, coreset-kmeans, svd")
+      } text ("supported algorithms are spark-kmeans, coreset-kmeans, coreset-svd")
 
       opt[Int]("batchSecs") optional () action {
         (x, c) => c.copy(batchSecs = x)
@@ -169,13 +165,17 @@ object App extends Serializable {
         (x, c) => c.copy(parallelism = x)
       } text("parallelism for effecting repartitioning")
 
-      opt[String]('p', "rootPath") optional () action {
-        (x, c) => c.copy(rootPath = x)
-      } text("the root path directory can be on FS or HDFS")
+      opt[String]('c', "checkpointDir") optional () action {
+        (x, c) => c.copy(checkpointDir = x)
+      } text("the checkpointDir for spark, can be on FS or HDFS")
 
       opt[String]('i', "input") required () action {
         (x, c) => c.copy(input = x)
       } text("input file or source")
+      
+      opt[String]('o', "output") required () action {
+        (x, c) => c.copy(output = x)
+      } text("the suffix of the path to use for output centers RDD")
       
       opt[String]('m', "mode") required () action {
         (x, c) => c.copy(mode = x)
@@ -220,14 +220,11 @@ object App extends Serializable {
   }
   
   def testBulk(params: Params): Unit = {
-    val rootDir = params.rootPath
-    val sparkCheckpointDir = s"${rootDir}/spark-temp/checkpoint"
-    val sparkLocalDir = s"${rootDir}/spark-temp/local"
+    val sparkCheckpointDir = params.checkpointDir
     val inputFile =  params.input
     
     val sparkConf = new SparkConf()
       .setAppName("BulkCoresets")
-      .set("spark.local.dir", sparkLocalDir)
       .set("spark.ui.showConsoleProgress", "false")
       .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
       .set("spark.kryo.registrationRequired", "false")
@@ -249,7 +246,7 @@ object App extends Serializable {
       val centers = model.clusterCenters
       val centersRDD = sc.makeRDD(Seq(centers))
       
-      centersRDD.saveAsObjectFile(s"${sparkLocalDir}/${params.centerPathSuffix}/center.vecs")
+      centersRDD.saveAsObjectFile(s"${params.output}")
     }
     else if ("coreset-kmeans" == params.alg) {
       val sampler = new TreeSampler[WPoint](
@@ -272,7 +269,7 @@ object App extends Serializable {
       ).toArray
 
       val centersRDD = sc.makeRDD(Seq(centroids))
-      centersRDD.saveAsObjectFile(s"${sparkLocalDir}/${params.centerPathSuffix}/center.vecs")
+      centersRDD.saveAsObjectFile(s"${params.output}")
     }
     else if ("spark-svd" == params.alg) {
       val rows = data.map(p => Vectors.dense(p.getPoint)).cache
@@ -288,9 +285,7 @@ object App extends Serializable {
   }
   
   def testStreaming(params: Params): Unit = {
-    val rootDir = params.rootPath
-    val sparkCheckpointDir = s"${rootDir}/spark-temp/checkpoint"
-    val sparkLocalDir = s"${rootDir}/spark-temp/local"
+    val sparkCheckpointDir = params.checkpointDir
     val hostport = params.input.split(':')
     require(hostport.length == 2)
     val hostname = hostport(0)
@@ -298,7 +293,6 @@ object App extends Serializable {
 
     val sparkConf = new SparkConf()
       .setAppName("StreaimingCoresets")
-      .set("spark.local.dir", sparkLocalDir)
       .set("spark.ui.showConsoleProgress", "false")
       .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
       .set("spark.kryo.registrationRequired", "false")
@@ -322,25 +316,26 @@ object App extends Serializable {
     
     def parse = if (params.denseData) parseDense _ else parseSparse _
     val data = ssc.socketTextStream(hostname, port).map(parse)
+    
+    val fileoutExt = getFileExt(params.output)
+    val filename = params.output.substring(0, params.output.length - fileoutExt.length)
 
     if ("coreset-kmeans" == params.alg) {
       val samples = sampler.sample(data)
       val centroids = coresetKmeansCentroids(samples, params.batchSecs)
-      centroids.saveAsObjectFiles(s"${sparkLocalDir}/${params.centerPathSuffix}/center", "vecs")
+      centroids.saveAsObjectFiles(filename, fileoutExt)
     }
     else if ("spark-kmeans" == params.alg) {
       val centroids = getCentersDStream(data, params.batchSecs)
-      centroids.saveAsObjectFiles(s"${sparkLocalDir}/${params.centerPathSuffix}/center", "vecs")
+      centroids.saveAsObjectFiles(filename, fileoutExt)
     }
     else if ("spark-svd" == params.alg) {
       throw new RuntimeException(s"spark-svd does not exist for streaming")
     }
     else if ("coreset-svd" == params.alg) {
-      sampler.sample(data, it => {
-        // TODO: write code here
-        val svdAlg = new WeightedKMeansPlusPlusClusterer[WPoint](k)
-        svdAlg.cluster(it.toList.asJava)
-      })
+      val samples = sampler.sample(data)
+      val Vs = coresetSvdOrthonormalBase(samples, params.batchSecs)
+      Vs.saveAsObjectFiles(filename, fileoutExt)
     }
     else {
       throw new RuntimeException(s"unsupported algorithm {$params.alg}")
@@ -349,6 +344,11 @@ object App extends Serializable {
     ssc.start
 //    ssc.awaitTermination(1000L*60L*15L)
     ssc.awaitTermination
+  }
+  
+  private def getFileExt(f: String): String = {
+    val arr = f.split('.')
+    if (arr.isEmpty) "" else arr.last
   }
   
   def getCentersDStream(data: DStream[WPoint], batchSecs: Long): DStream[Array[Vector]] = {
@@ -398,6 +398,24 @@ object App extends Serializable {
 
       rdd.zipWithIndex.filter(_._2 == 0L).map(_ => cost)
 */
+      
+      lazy val deltaT = System.currentTimeMillis - before
+      println(s"stream processing for $numPoints points duration is $deltaT ms")
+      require(deltaT < 1000L*batchSecs, s"$deltaT")
+      
+      centroidsRDD
+    })
+  }
+
+  private def coresetSvdOrthonormalBase(points: DStream[WPoint], batchSecs: Long): DStream[Array[Vector]] = {
+    points.transform(rdd => {
+      val before = System.currentTimeMillis
+      
+      val numPoints = rdd.count
+      val V = rdd.map(p => Vectors.dense(p.getPoint)).collect
+
+      val sc = rdd.sparkContext
+      val centroidsRDD = sc.makeRDD(Seq(V))
       
       lazy val deltaT = System.currentTimeMillis - before
       println(s"stream processing for $numPoints points duration is $deltaT ms")

@@ -1,19 +1,75 @@
 package streaming.coresets
 
 import univ.ml.WeightedDoublePoint
+import scala.ref.SoftReference
 
 object Domain {
-  type WPoint = WeightedDoublePoint
+  def createWeightedPoint(coords: Array[Double], w: Double = 1.0): WeightedDoublePoint = {
+    new WeightedDoublePoint(coords, w, "")
+  }
   
-  def createWeightedPoint(coords: Array[Double]): WPoint = {
-    new WPoint(coords, 1.0, "")
+  trait AbstractWPoint extends Serializable {
+    def toWeightedDoublePoint(): WeightedDoublePoint
+  }
+  
+  class WrapperWPoint(wpoint: WeightedDoublePoint) extends AbstractWPoint {
+    override def toWeightedDoublePoint(): WeightedDoublePoint = wpoint
+  }
+  
+  class LazyWPoint(size: Int, pairs: Seq[(Int, Double)], weight: Double) extends AbstractWPoint {
+    private var cachedWPoint: SoftReference[WeightedDoublePoint] = new SoftReference[WeightedDoublePoint](null)
+    
+    private def createWeightedDoublePoint(): WeightedDoublePoint = {
+      val coords = new Array[Double](size)
+      pairs.par.foreach{ case(i, value) => coords(i) = value }
+      createWeightedPoint(coords, weight)
+    }
+    
+    override def toWeightedDoublePoint(): WeightedDoublePoint = {
+      this.synchronized {
+        val wp = cachedWPoint.get
+        
+        if (wp.isEmpty) {
+          val newP = createWeightedDoublePoint()
+          cachedWPoint = new SoftReference(newP)
+          newP
+        }
+        else wp.get
+      }
+    }
+  }
+  
+  type WPoint = AbstractWPoint
+  
+  object WPoint extends Serializable {
+    def create(coords: Array[Double]): AbstractWPoint = 
+      new WrapperWPoint(createWeightedPoint(coords))
+
+    def create(size: Int, pairs: Seq[(Int, Double)]): AbstractWPoint = 
+      new LazyWPoint(size, pairs, 1.0)
+    
+    def create(point: WeightedDoublePoint): AbstractWPoint = {
+      val zc = point.getPoint.filter(_ == 0.0).size.toDouble
+      val c = point.getPoint.size.toDouble
+      
+      if (zc/c < 0.5) {
+        new LazyWPoint(
+            point.getPoint.length, 
+            (0 until point.getPoint.length).map(i => (i, point.getPoint()(i))),
+            point.getWeight
+        )
+      }
+      else {
+        new WrapperWPoint(point)
+      }
+    }
   }
   
   def parseDense(line: String): WPoint = {
     val arr = line.split(' ')
     assert(arr.length >= 2)
     val coords = (0 until arr.length - 1).map(i => arr(i).toDouble).toArray
-    createWeightedPoint(coords)
+    WPoint.create(coords)
   }
   
   def parseSparse(line: String): WPoint = {
@@ -31,8 +87,6 @@ object Domain {
       (index, value)
     })
 
-    val coords = new Array[Double](size)
-    pairs.par.foreach{ case(i, value) => coords(i) = value }
-    createWeightedPoint(coords)
+    WPoint.create(size, pairs)
   }
 }

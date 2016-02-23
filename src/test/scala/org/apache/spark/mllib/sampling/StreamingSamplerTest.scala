@@ -2,10 +2,17 @@ package org.apache.spark.mllib.sampling
 
 import org.junit.Assert._
 import org.junit.Test
-import com.ibm.spark.Config._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.SparkConf
+import org.apache.spark.SparkContext
 
 class StreamingSamplerTest extends Serializable {
+  private val conf = new SparkConf()
+    .set("spark.app.name", "UnitTest")
+    .set("spark.master", "local[2]")
+
+  private val sc = new SparkContext(conf)
+
   class TestSampleTaker extends SampleTaker[Int] {
     private def smallest(iter: Iterable[Int], sampleSize: Int): Iterable[Int] = {
       val arr = iter.toArray.sortBy(i => i)

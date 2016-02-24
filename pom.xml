@@ -11,16 +11,16 @@
   <url>http://maven.apache.org</url>
 
 	<properties>
-    	<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    
-		<scala.version>2.10.6</scala.version>
+		<scala.major>2.10</scala.major>
+		<scala.version>${scala.major}.6</scala.version>
 		<spark.version>1.6.0</spark.version>
-<!-- 		
- 		<spark.version>2.0.0-SNAPSHOT</spark.version>
+<!--
+		<spark.version>2.0.0-SNAPSHOT</spark.version>
  -->
 	</properties>
 
 	<dependencies>
+		<!-- Scala stuff -->
 		<dependency>
 			<groupId>org.scala-lang</groupId>
 			<artifactId>scala-compiler</artifactId>
@@ -29,68 +29,43 @@
 		
 		<dependency>
 			<groupId>com.github.scopt</groupId>
-			<artifactId>scopt_2.10</artifactId>
-			<version>3.3.0</version>
-		</dependency>
-
-		<!-- spark -->
-		<dependency>
-			<groupId>org.apache.spark</groupId>
-			<artifactId>spark-core_2.10</artifactId>
-			<version>${spark.version}</version>
-			<scope>provided</scope>
-		</dependency>
-
-		<dependency>
-			<groupId>org.apache.spark</groupId>
-			<artifactId>spark-streaming_2.10</artifactId>
-			<version>${spark.version}</version>
-			<scope>provided</scope>
-		</dependency>
-
-		<dependency>
-			<groupId>org.apache.spark</groupId>
-			<artifactId>spark-mllib_2.10</artifactId>
-			<version>${spark.version}</version>
-			<scope>provided</scope>
-		</dependency>
-		
-		<dependency>
-		  	<groupId>univ.ml</groupId>
-  			<artifactId>coreset</artifactId>
-  			<version>1.0-SNAPSHOT</version>
-		</dependency>
-<!--  		
-		<dependency>
-			<groupId>com.datastax.spark</groupId>
-			<artifactId>spark-cassandra-connector_2.10</artifactId>
-			<version>1.3.0-M1</version>
-		</dependency>
-
-		<dependency>
-			<groupId>amplab</groupId>
-			<artifactId>spark-indexedrdd</artifactId>
-			<version>0.1</version>
-		</dependency>		
--->
-
-		<!-- Scala command line parser -->
-		<dependency>
-			<groupId>com.github.scopt</groupId>
-			<artifactId>scopt_2.10</artifactId>
+			<artifactId>scopt_${scala.major}</artifactId>
 			<version>3.3.0</version>
 		</dependency>
  
 		<dependency>
 			<groupId>com.typesafe.scala-logging</groupId>
-			<artifactId>scala-logging-slf4j_2.10</artifactId>
+			<artifactId>scala-logging-slf4j_${scala.major}</artifactId>
 			<version>2.1.2</version>
 		</dependency>
 
+		<!-- spark -->
 		<dependency>
-			<groupId>org.reflections</groupId>
-			<artifactId>reflections</artifactId>
-			<version>0.9.10</version>
+			<groupId>org.apache.spark</groupId>
+			<artifactId>spark-core_${scala.major}</artifactId>
+			<version>${spark.version}</version>
+			<scope>provided</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>org.apache.spark</groupId>
+			<artifactId>spark-streaming_${scala.major}</artifactId>
+			<version>${spark.version}</version>
+			<scope>provided</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>org.apache.spark</groupId>
+			<artifactId>spark-mllib_${scala.major}</artifactId>
+			<version>${spark.version}</version>
+			<scope>provided</scope>
+		</dependency>
+		
+		<!-- internal -->		
+		<dependency>
+		  	<groupId>univ.ml</groupId>
+  			<artifactId>coreset</artifactId>
+  			<version>1.0-SNAPSHOT</version>
 		</dependency>
 
 		<!-- testing -->
@@ -102,14 +77,6 @@
 		</dependency>
 	</dependencies>
 	
-	<repositories>
-		<repository>
-			<id>spark-indexedrdd</id>
-			<name>Spark Packages Repo</name>
-			<url>http://dl.bintray.com/spark-packages/maven</url>
-		</repository>
-	</repositories>
-
 	<build>
 		<sourceDirectory>src/main/scala</sourceDirectory>
 		<testSourceDirectory>src/test/scala</testSourceDirectory>

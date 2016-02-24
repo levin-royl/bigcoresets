@@ -4,7 +4,7 @@
 
   <groupId>streaming</groupId>
   <artifactId>bigcoresets</artifactId>
-  <version>0.0.1-SNAPSHOT</version>
+  <version>1.0</version>
   <packaging>jar</packaging>
 
   <name>bigcoresets</name>
@@ -67,6 +67,12 @@
   			<artifactId>coreset</artifactId>
   			<version>1.0-SNAPSHOT</version>
 		</dependency>
+		
+		<dependency>
+			<groupId>org.apache.commons</groupId>
+			<artifactId>commons-math3</artifactId>
+			<version>3.6</version>
+		</dependency>
 
 		<!-- testing -->
 		<dependency>
@@ -99,8 +105,8 @@
 					<artifactId>maven-compiler-plugin</artifactId>
 					<version>2.0.2</version>
 					<configuration>
-						<source>1.8</source>
-						<target>1.8</target>
+						<source>1.7</source>
+						<target>1.7</target>
 					</configuration>
 				</plugin>
 			</plugins>

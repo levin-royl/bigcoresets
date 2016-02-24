@@ -19,8 +19,6 @@ libraryDependencies ++= Seq(
   "com.typesafe.scala-logging" %% "scala-logging-slf4j" % "2.1.2",
 
 
-  "org.reflections" % "reflections" % "0.9.1",
-  
   "univ.ml" % "coreset" % "1.0-SNAPSHOT",
 
   "junit" % "junit" % "4.8.1" % "test"

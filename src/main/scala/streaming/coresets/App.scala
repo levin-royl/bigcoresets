@@ -198,6 +198,15 @@ object App extends Serializable {
   }
   
   def main(args: Array[String]) {
+    {
+      println("checking if I can instansiate RealMatrix from math commons")
+      
+      val justIntansiateMathCommons: org.apache.commons.math.linear.RealMatrix = 
+        new org.apache.commons.math.linear.Array2DRowRealMatrix(1, 1)
+      
+      println("success!")
+    }
+    
     val before = System.currentTimeMillis
     
     val params = cli(args)
@@ -271,15 +280,15 @@ object App extends Serializable {
       .set("spark.ui.showConsoleProgress", "false")
       .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
       .set("spark.kryo.registrationRequired", "false")
-      .set("spark.storage.blockManagerSlaveTimeoutMs", "10000000")
-      .set("spark.executor.heartbeatInterval", "100000s")
-      .set("spark.akka.heartbeat.interval", "100000000s")
+//      .set("spark.storage.blockManagerSlaveTimeoutMs", "10000000")
+//      .set("spark.executor.heartbeatInterval", "100000s")
+//      .set("spark.akka.heartbeat.interval", "100000000s")
       
     params.sparkParams.foreach{ case(key, value) => sparkConf.set(key, value) }
     
-    def parse = if (params.denseData) parseDense _ else parseSparse _
-
     val sc = new SparkContext(sparkConf)
+    
+    def parse = if (params.denseData) parseDense _ else parseSparse _
     val data = sc.textFile(inputFile).map(parse)
     
     if ("spark-kmeans" == params.alg) {

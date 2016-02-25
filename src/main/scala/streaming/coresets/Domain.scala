@@ -7,7 +7,8 @@ object Domain {
   def createWeightedPoint(coords: Array[Double], w: Double = 1.0): WeightedDoublePoint = {
     new WeightedDoublePoint(coords, w, "")
   }
-  
+
+/*  
   trait AbstractWPoint extends Serializable {
     def toWeightedDoublePoint(): WeightedDoublePoint
   }
@@ -38,9 +39,21 @@ object Domain {
       }
     }
   }
+*/
   
-  type WPoint = AbstractWPoint
+  type WPoint = WeightedDoublePoint
+
+  object WPoint extends Serializable {
+    def create(coords: Array[Double]): WPoint = createWeightedPoint(coords)
+
+    def create(size: Int, pairs: Seq[(Int, Double)]): WPoint = {
+      val coords = new Array[Double](size)
+      pairs.par.foreach{ case(i, value) => coords(i) = value }
+      create(coords)
+    }
+  }
   
+/*  
   object WPoint extends Serializable {
     def create(coords: Array[Double]): AbstractWPoint = 
       new WrapperWPoint(createWeightedPoint(coords))
@@ -64,7 +77,8 @@ object Domain {
       }
     }
   }
-  
+*/  
+
   def parseDense(line: String): WPoint = {
     val arr = line.split(' ')
     assert(arr.length >= 2)

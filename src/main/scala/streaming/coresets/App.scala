@@ -46,9 +46,9 @@ case class Params(
   mode: String = "",
 
   sparkParams: Map[String, String] = Map(
-    "spark.serializer" -> "org.apache.spark.serializer.KryoSerializer",
-    "spark.kryo.registrationRequired" -> "false"
-//      "spark.kryoserializer.buffer.max.mb" -> "1024"
+//    "spark.serializer" -> "org.apache.spark.serializer.KryoSerializer",
+//    "spark.kryo.registrationRequired" -> "false"
+//    "spark.kryoserializer.buffer.max.mb" -> "1024"
   )
 )
 
@@ -104,13 +104,14 @@ object MySampleTaker extends Serializable {
 
 import MySampleTaker._
 
-case class WPointWithId(id: Int, inner: WPoint) extends WPoint {
-  def toWeightedDoublePoint(): WeightedDoublePoint = inner.toWeightedDoublePoint
+case class WPointWithId(id: Int, inner: WPoint) 
+  extends WPoint(inner.getPoint, inner.getProbability, inner.getLabel) {
+//  def toWeightedDoublePoint(): WeightedDoublePoint = inner.toWeightedDoublePoint
 }
 
 class MySampleTaker(alg: CoresetAlgorithm[WeightedDoublePoint]) extends SampleTaker[WPoint] {
   override def take(oelms: Iterable[WPoint], sampleSize: Int): Iterable[WPoint] = {
-    val elms = oelms.map(_.toWeightedDoublePoint)
+    val elms = oelms // .map(_.toWeightedDoublePoint)
     
     val res = if (elms.size > sampleSize) {
 //      println(s"sampling starting from ${elms.size} instances")
@@ -122,7 +123,7 @@ class MySampleTaker(alg: CoresetAlgorithm[WeightedDoublePoint]) extends SampleTa
     }
     else elms
 
-    res.map(p => WPoint.create(p))
+    res // .map(p => WPoint.create(p))
   }
 
   override def takeIds(elmsWithIds: Iterable[(Int, WPoint)], sampleSize: Int): Set[Int] = {
@@ -197,16 +198,7 @@ object App extends Serializable {
     ores.get
   }
   
-  def main(args: Array[String]) {
-    {
-      println("checking if I can instansiate RealMatrix from math commons")
-      
-      val justIntansiateMathCommons: org.apache.commons.math.linear.RealMatrix = 
-        new org.apache.commons.math.linear.Array2DRowRealMatrix(1, 1)
-      
-      println("success!")
-    }
-    
+  def main(args: Array[String]) {    
     val before = System.currentTimeMillis
     
     val params = cli(args)
@@ -236,8 +228,6 @@ object App extends Serializable {
     val sparkConf = new SparkConf()
       .setAppName("EvaluateCost")
       .set("spark.ui.showConsoleProgress", "false")
-      .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-      .set("spark.kryo.registrationRequired", "false")
     
     params.sparkParams.foreach{ case(key, value) => sparkConf.set(key, value) }
     
@@ -278,8 +268,6 @@ object App extends Serializable {
     val sparkConf = new SparkConf()
       .setAppName("BulkCoresets")
       .set("spark.ui.showConsoleProgress", "false")
-      .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-      .set("spark.kryo.registrationRequired", "false")
 //      .set("spark.storage.blockManagerSlaveTimeoutMs", "10000000")
 //      .set("spark.executor.heartbeatInterval", "100000s")
 //      .set("spark.akka.heartbeat.interval", "100000000s")
@@ -292,7 +280,8 @@ object App extends Serializable {
     val data = sc.textFile(inputFile).map(parse)
     
     if ("spark-kmeans" == params.alg) {
-      val points = data.map(p => Vectors.dense(p.toWeightedDoublePoint.getPoint)).cache
+//      val points = data.map(p => Vectors.dense(p.toWeightedDoublePoint.getPoint)).cache
+      val points = data.map(p => Vectors.dense(p.getPoint)).cache
       val model = KMeans.train(points, k, Int.MaxValue)
       
       val centers = model.clusterCenters
@@ -315,7 +304,8 @@ object App extends Serializable {
       val samples = sampler.sample(data.repartition(numPartitions).cache)
 
       val kmeansAlg = new WeightedKMeansPlusPlusClusterer[WeightedDoublePoint](k)
-      val sample = samples.map(_.toWeightedDoublePoint).toList.asJava
+//      val sample = samples.map(_.toWeightedDoublePoint).toList.asJava
+      val sample = samples.toList.asJava
       val centroids = kmeansAlg.cluster(sample).asScala.map(c => 
         Vectors.dense(c.getCenter.getPoint)
       ).toArray
@@ -324,7 +314,8 @@ object App extends Serializable {
       centersRDD.saveAsObjectFile(s"${params.output}")
     }
     else if ("spark-svd" == params.alg) {
-      val rows = data.map(p => Vectors.dense(p.toWeightedDoublePoint.getPoint)).cache
+//      val rows = data.map(p => Vectors.dense(p.toWeightedDoublePoint.getPoint)).cache
+      val rows = data.map(p => Vectors.dense(p.getPoint)).cache
       val mat = new RowMatrix(rows)
 
       val model = mat.computeSVD(dim, computeU = false)
@@ -353,14 +344,10 @@ object App extends Serializable {
     val sparkConf = new SparkConf()
       .setAppName("StreaimingCoresets")
       .set("spark.ui.showConsoleProgress", "false")
-      .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-      .set("spark.kryo.registrationRequired", "false")
       .set("spark.streaming.receiver.maxRate", (1024*32).toString)
       .set("spark.streaming.receiver.writeAheadLog.enable", "true")
 //      .set("spark.streaming.backpressure.enabled", "true")
       .set("spark.streaming.stopGracefullyOnShutdown", "true")
-
-//    sparkConf.registerKryoClasses(kryoClasses)
 
     params.sparkParams.foreach{ case(key, value) => sparkConf.set(key, value) }
 
@@ -421,7 +408,8 @@ object App extends Serializable {
     data.transform(rdd => {
       val before = System.currentTimeMillis
       val numPoints = rdd.count
-      val points = rdd.map(p => Vectors.dense(p.toWeightedDoublePoint.getPoint))
+//      val points = rdd.map(p => Vectors.dense(p.toWeightedDoublePoint.getPoint))
+      val points = rdd.map(p => Vectors.dense(p.getPoint))
       
       model = model.update(points, kmeansAlg.decayFactor, kmeansAlg.timeUnit)
       val centers = model.clusterCenters
@@ -443,10 +431,11 @@ object App extends Serializable {
       
       val numPoints = rdd.count
       val kmeansAlg = new WeightedKMeansPlusPlusClusterer[WeightedDoublePoint](k)
-      val sample = rdd.map(_.toWeightedDoublePoint).collect.toList.asJava
-      val centroids = kmeansAlg.cluster(sample).asScala.map(c => 
+//      val sample = rdd.map(_.toWeightedDoublePoint).collect.toList.asJava
+      val sample = rdd.collect.toList.asJava
+      val centroids = if (!sample.isEmpty) kmeansAlg.cluster(sample).asScala.map(c => 
         Vectors.dense(c.getCenter.getPoint)
-      ).toArray
+      ).toArray else Array.empty[Vector]
       
       val sc = rdd.sparkContext
       val centroidsRDD = sc.makeRDD(Seq(centroids))
@@ -469,19 +458,24 @@ object App extends Serializable {
   private def coresetSvdOrthonormalBase(points: DStream[WPoint], batchSecs: Long): DStream[Array[Vector]] = {
     points.transform(rdd => {
       val before = System.currentTimeMillis
-      
-      val numPoints = rdd.count
-      val Varr = rdd.map(p => Vectors.dense(p.toWeightedDoublePoint.getPoint)).take(dim)
-      val V = new DenseMatrix(Varr.length, Varr(0).size, Varr.flatMap(_.toArray)).transpose
 
-      val sc = rdd.sparkContext
-      val centroidsRDD = sc.makeRDD(Seq(V.rows.toArray))
-      
-      lazy val deltaT = System.currentTimeMillis - before
-      println(s"stream processing for $numPoints points duration is $deltaT ms")
-      require(deltaT < 1000L*batchSecs, s"$deltaT")
-      
-      centroidsRDD
+      if (!rdd.isEmpty) {
+        val numPoints = rdd.count
+//        val Varr = rdd.map(p => Vectors.dense(p.toWeightedDoublePoint.getPoint)).take(dim)
+        val Varr = rdd.map(p => Vectors.dense(p.getPoint)).take(dim)
+        val V = new DenseMatrix(Varr.length, Varr(0).size, Varr.flatMap(_.toArray)).transpose
+  
+        val sc = rdd.sparkContext
+        val centroidsRDD = sc.makeRDD(Seq(V.rows.toArray))
+        
+        lazy val deltaT = System.currentTimeMillis - before
+        println(s"stream processing for $numPoints points duration is $deltaT ms")
+        require(deltaT < 1000L*batchSecs, s"$deltaT")
+        
+        centroidsRDD
+      } else {
+        rdd.sparkContext.emptyRDD[Array[Vector]]
+      }
     })
   }
 }

@@ -235,6 +235,8 @@ class TreeSampler[T](
   
   private[sampling] 
   def flatTreeSample(rdd: RDD[T]): RDD[(Layer, SampleContainer[T])] = {
+//    val origNumPartitions = rdd.partitions.length
+
     rdd.mapPartitionsWithIndex((partition, it) => {
       val instances = it.toSeq
 
@@ -244,7 +246,7 @@ class TreeSampler[T](
               SampleContainer.create(instances).performSampling(config, sampleTaker)
           )
       )
-    }, false).flatMapValues(sc => sc) // .repartition(newNumPartitions)
+    }, false).flatMapValues(sc => sc) // .repartition(origNumPartitions)
   }
   
   private[sampling] 
@@ -277,18 +279,20 @@ class TreeSampler[T](
         currIndexedSamples = nextIndexedSamples.cache
       } while (chg && currIndexedSamples.count > 1L)
 
-      repartition(currIndexedSamples)
+      currIndexedSamples
     }
     else {
       rdd
     }
   }
 
+/*  
   private def repartition(rdd: RDDLike[(Layer, SampleContainer[T])]) = {
     val requiredNumPartitions = rdd.map(_._1.nodePartition).distinct.count.toInt
     rdd.repartition(requiredNumPartitions)
   }
-  
+*/
+
   private def climb(layer: Layer): Layer = {
     Layer(layer.level + 1, layer.nodePartition/config.numNodesToSample)
   }
@@ -308,12 +312,13 @@ class StreamingTreeSampler[T](
     dstream.transform(rdd => {
       val before = System.currentTimeMillis
 
+      val origNumPartitions = rdd.partitions.length
       val currFlatTreeSample = config.createRDDLike(treeSampler.flatTreeSample(rdd))
       val nextRawTreeSample = if (stateTreeSample != null) {
-        stateTreeSample.union(currFlatTreeSample)
+        stateTreeSample.union(currFlatTreeSample).repartition(origNumPartitions)
       } else currFlatTreeSample
       
-      val currTreeSample = treeSampler.treeSample(nextRawTreeSample)
+      val currTreeSample = treeSampler.treeSample(nextRawTreeSample).repartition(origNumPartitions)
       
       currTreeSample.checkpoint
       val cachedCurrTreeSample = currTreeSample.cache
@@ -326,7 +331,8 @@ class StreamingTreeSampler[T](
       val deltaT = System.currentTimeMillis - before
 
       info(s"stream processing duration is $deltaT ms")
-      require(deltaT < 1000L*batchSecs, s"$deltaT")
+      
+//      require(deltaT < 1000L*batchSecs, s"$deltaT")
 
       if (res.isInstanceOf[RDDLikeWrapper[_]]) {
         res.asInstanceOf[RDDLikeWrapper[T]].getSelf

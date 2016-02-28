@@ -396,7 +396,9 @@ private case class SampleContainer[T](
       val sSize = cs.size
       
       if (sSize >= inputSampleSize) {
-        val theSample = if (sSize > config.sampleSize) sampleTaker.take(cs, config.sampleSize) else cs
+        require(sSize > config.sampleSize)
+        val theSample = sampleTaker.take(cs, config.sampleSize)
+        require(theSample.size < sSize, s"asked for sample size ${config.sampleSize} but got ${theSample.size}")
         SampleContainer.create(theSample, theSample.size)
       }
       else {

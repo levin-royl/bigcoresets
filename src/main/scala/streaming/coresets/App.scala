@@ -107,7 +107,9 @@ class MySampleTaker(alg: CoresetAlgorithm[WeightedDoublePoint]) extends SampleTa
     val elms = oelms // .map(_.toWeightedDoublePoint)
     
     val res = if (elms.size > sampleSize) {
-      alg.takeSample(elms.toList.asJava).asScala
+      val rr = alg.takeSample(elms.toList.asJava).asScala
+      require(rr.size <= sampleSize, s"requested sample size ${sampleSize} but got ${rr.size}")
+      rr
     }
     else elms
 
@@ -340,10 +342,6 @@ object App extends Serializable {
   
   def testStreaming(params: Params): Unit = {
     val sparkCheckpointDir = params.checkpointDir
-    val hostport = params.input.split(':')
-    require(hostport.length == 2)
-    val hostname = hostport(0)
-    val port = hostport(1).toInt
 
     val sparkConf = new SparkConf()
       .setAppName("StreaimingCoresets")
@@ -363,10 +361,23 @@ object App extends Serializable {
         new MySampleTaker(coresetAlg(params.alg, params.algParams, params.sampleSize)),
         params.batchSecs
     )
-    
+
     def parse = if (params.denseData) parseDense _ else parseSparse _
-    val data = ssc.socketTextStream(hostname, port).repartition(params.parallelism).map(parse).cache
-    
+
+    val lines: DStream[String] = if (params.input.startsWith("socket://")) {
+      val hostport = params.input.substring("socket://".length).split(':')
+      require(hostport.length == 2)
+      val hostname = hostport(0)
+      val port = hostport(1).toInt
+      ssc.socketTextStream(hostname, port)
+    }
+    else {
+      assert(params.input.startsWith("hdfs://") || params.input.startsWith("file://"))
+      ssc.textFileStream(params.input)
+    }
+
+    val data = lines.repartition(params.parallelism).map(parse).cache
+
     val fileoutExt = getFileExt(params.output)
     val filename = params.output.substring(0, params.output.length - fileoutExt.length)
 

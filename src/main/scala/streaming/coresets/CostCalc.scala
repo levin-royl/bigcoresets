@@ -25,7 +25,7 @@ class CostCalc(sc: SparkContext) extends Serializable {
 
     var i = 1
 //    val data = points.map(p => Vectors.dense(p.toWeightedDoublePoint.getPoint)) // .cache
-    val data = points.map(p => Vectors.dense(p.getPoint)).cache
+    val data = points.map(_.toVector).cache
 
     println(s"path\t#batch\tcost\tk\t|D|\tstats")
       

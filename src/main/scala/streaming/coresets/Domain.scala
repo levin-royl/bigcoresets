@@ -2,6 +2,11 @@ package streaming.coresets
 
 import univ.ml.WeightedDoublePoint
 import scala.ref.SoftReference
+import univ.ml.sparse.SparseWeightableVector
+import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.linalg.Vectors
+import scala.collection.JavaConverters._
+import java.util.HashMap
 
 object Domain {
   def createWeightedPoint(coords: Array[Double], w: Double = 1.0): WeightedDoublePoint = {
@@ -41,15 +46,62 @@ object Domain {
   }
 */
   
-  type WPoint = WeightedDoublePoint
+  trait WPoint extends Serializable {
+    def isSparse: Boolean
+    
+    def toWeightedDoublePoint: WeightedDoublePoint
+    
+    def toSparseWeightableVector: SparseWeightableVector
+    
+    def toVector: Vector
+  }
+  
+  class DenseWPoint(inner: WeightedDoublePoint) extends WPoint {
+    override def isSparse: Boolean = false
+    
+    override def toWeightedDoublePoint: WeightedDoublePoint = inner
+    
+    override def toSparseWeightableVector: SparseWeightableVector = {
+      throw new UnsupportedOperationException("not sparse")
+    }
+    
+    override def toVector: Vector = Vectors.dense(toWeightedDoublePoint.getPoint)
+  }
+  
+  class SparseWPoint(inner: SparseWeightableVector) extends WPoint {
+    override def isSparse: Boolean = true
+    
+    override def toWeightedDoublePoint: WeightedDoublePoint = {
+      throw new UnsupportedOperationException("not dense")
+    }
+    
+    override def toSparseWeightableVector: SparseWeightableVector = inner
 
+    override def toVector: Vector = {
+      Vectors.sparse(
+          inner.getDimension, 
+          inner.iterator.asScala.map(ent => (ent.getIndex, ent.getValue)).toSeq
+      )
+    }
+  }
+  
   object WPoint extends Serializable {
-    def create(coords: Array[Double]): WPoint = createWeightedPoint(coords)
+    def apply(inner: WeightedDoublePoint) = new DenseWPoint(inner)
+    
+    def apply(inner: SparseWeightableVector) = new SparseWPoint(inner)
+    
+    def create(coords: Array[Double]): WPoint = new DenseWPoint(createWeightedPoint(coords))
 
     def create(size: Int, pairs: Seq[(Int, Double)]): WPoint = {
+      val map = new HashMap[java.lang.Integer, java.lang.Double](pairs.length)
+      pairs.foreach(p => map.put(p._1, p._2))
+      WPoint(new SparseWeightableVector(map, size))
+
+/*      
       val coords = new Array[Double](size)
       pairs.par.foreach{ case(i, value) => coords(i) = value }
       create(coords)
+*/
     }
   }
   

@@ -14,6 +14,8 @@ spark-submit --class streaming.coresets.App \
 	--conf spark.driver.maxResultSize=20g \
 	--conf spark.streaming.receiver.maxRate=32768 \
 	--conf spark.streaming.receiver.writeAheadLog.enable=true \
+    --conf spark.executor.extraJavaOptions=-XX:+PrintGCDetails \
+    --conf spark.executor.extraJavaOptions=-XX:+HeapDumpOnOutOfMemoryError \
 	bigcoresets-1.0.jar \
 		--checkpointDir hdfs:///user/royl/checkpoint \
 		--denseData \

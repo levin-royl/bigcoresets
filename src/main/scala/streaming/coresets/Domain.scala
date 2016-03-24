@@ -46,7 +46,20 @@ object Domain {
   }
 */
   
+  implicit class WeightedDoublePointHelper(p: WeightedDoublePoint) extends Serializable {
+    def toVector(): Vector = Vectors.dense(p.getPoint)
+  }
+  
+  implicit class SparseWeightableVectorHelper(p: SparseWeightableVector) extends Serializable {
+    def toVector(): Vector = Vectors.sparse(
+        p.getDimension, 
+        p.sparseIterator.asScala.map(ent => (ent.getIndex, ent.getValue)).toSeq
+    )
+  }
+  
   trait WPoint extends Serializable {
+    var id: Int = -1
+    
     def isSparse: Boolean
     
     def toWeightedDoublePoint: WeightedDoublePoint
@@ -140,7 +153,7 @@ object Domain {
   
   def parseSparse(line: String): WPoint = {
     val arr = line.split(' ')
-    assert(arr.length >= 2 && arr.length%2 == 0)
+    assert(arr.length >= 2 && arr.length%2 == 0, s"${arr.mkString(",")}")
 
     val rowNum = arr(0).toLong
     val size = arr(1).toInt

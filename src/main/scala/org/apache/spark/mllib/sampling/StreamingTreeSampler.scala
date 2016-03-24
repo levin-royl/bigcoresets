@@ -227,7 +227,9 @@ class TreeSampler[T](
   
   private[sampling] 
   def sampleFromTreeToRDD(rdd: RDDLike[(Layer, SampleContainer[T])]): RDDLike[T] = {
-    val elms = rdd.flatMap{ case(_, sc) => sc.sample }.zipWithIndex.map{ case(elm, id) => (id.toInt, elm) }
+    val elms = rdd.flatMap{ case(_, sc) => sc.sample }
+      .zipWithIndex.map{ case(elm, id) => (id.toInt, elm) }
+
     val ids = sampleTaker.takeIds(elms.collect, config.sampleSize)
 
     elms.filter{ case(id, _) => ids.contains(id) }.values

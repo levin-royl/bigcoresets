@@ -1,81 +1,40 @@
 package streaming.coresets
 
 import scala.collection.JavaConverters._
-import scala.reflect.ClassTag
-import scala.util.Random
 import org.apache.spark.SparkConf
-import org.apache.spark.streaming.dstream.DStream
-import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.mllib.linalg.util.LinearAlgebraUtil._
-import org.apache.spark.mllib.sampling.SamplerConfig
-import org.apache.spark.mllib.sampling.StreamingTreeSampler
-import org.apache.spark.mllib.sampling.SampleTaker
-import org.apache.spark.streaming.Seconds
-import org.apache.spark.streaming.StreamingContext
-import univ.ml._
-import Domain._
-import org.apache.spark.mllib.clustering.StreamingKMeans
 import org.apache.spark.SparkContext
 import org.apache.spark.mllib.clustering.KMeans
-import org.apache.spark.mllib.sampling.TreeSampler
-import scala.collection.mutable.HashMap
+import org.apache.spark.mllib.clustering.StreamingKMeans
+import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.linalg.distributed.RowMatrix
-import org.apache.spark.mllib.linalg.distributed.MatrixEntry
-import org.apache.spark.mllib.linalg.SparseMatrix
-import org.apache.spark.mllib.linalg.DenseMatrix
-import univ.ml.sparse.SparseSVDCoreset
+import org.apache.spark.mllib.sampling.SampleTaker
+import org.apache.spark.mllib.sampling.SamplerConfig
+import org.apache.spark.mllib.sampling.StreamingTreeSampler
+import org.apache.spark.mllib.sampling.TreeSampler
+import org.apache.spark.rdd.RDD
+import org.apache.spark.streaming.Seconds
+import org.apache.spark.streaming.StreamingContext
+import org.apache.spark.streaming.dstream.DStream
+import Args.Params
+import Args.cli
+import Domain.WPoint
+import Domain.parseDense
+import Domain.parseSparse
+import MySampleTaker.numNodesToSample
+import univ.ml.BaseCoreset
+import univ.ml.NonUniformCoreset
+import univ.ml.SVDCoreset
+import univ.ml.WeightedDoublePoint
+import univ.ml.WeightedKMeansPlusPlusClusterer
 import univ.ml.sparse.SparseWeightableVector
 import univ.ml.sparse.algorithm.SparseCoresetAlgorithm
-
-import org.apache.spark.rdd.RDD
-
-case class Params(
-  verbose: Boolean = false,
-  
-  denseData: Boolean = false,
-
-  localRDDs: Boolean = false,
-
-  alg: String = "",
-
-  algParams: String = "",
-  
-  sampleSize: Int = -1,
-  
-  batchSecs: Int = 10,
-  
-  parallelism: Int = -1,
-
-  input: String = "",
-  
-  output: String = "",
-  
-  checkpointDir: String = "",
-  
-  mode: String = "",
-
-  sparkParams: Map[String, String] = Map(
-//    "spark.serializer" -> "org.apache.spark.serializer.KryoSerializer",
-//    "spark.kryo.registrationRequired" -> "false"
-//    "spark.kryoserializer.buffer.max.mb" -> "1024"
-  )
-)
+import univ.ml.sparse.SparseSVDCoreset
+import univ.ml.sparse.algorithm.SparseNonUniformCoreset
+import univ.ml.sparse.SparseWeightedKMeansPlusPlus
 
 object MySampleTaker extends Serializable {
   val numNodesToSample = 2
-}
-
-import MySampleTaker._
-
-class WPointWithId(val id: Int, inner: WPoint) extends WPoint {
-  override def isSparse: Boolean = inner.isSparse
-  
-  override def toWeightedDoublePoint: WeightedDoublePoint = inner.toWeightedDoublePoint
-  
-  override def toSparseWeightableVector: SparseWeightableVector = inner.toSparseWeightableVector
-  
-  override def toVector: Vector = inner.toVector
 }
 
 class BaseCoresetAlgorithm(
@@ -124,90 +83,14 @@ class MySampleTaker(alg: BaseCoresetAlgorithm) extends SampleTaker[WPoint] {
   }
 
   override def takeIds(elmsWithIds: Iterable[(Int, WPoint)], sampleSize: Int): Set[Int] = {
-    val withIds = elmsWithIds.map{ case(id, elm) => new WPointWithId(id, elm) }
-    val sample = take(withIds, sampleSize)
+    elmsWithIds.foreach{ case(id, elm) => elm.id = id }
+    val sample = take(elmsWithIds.map(_._2), sampleSize)
 
-    sample.map(_.asInstanceOf[WPointWithId].id).toSet
+    sample.map(_.id).toSet
   }
 }
 
 object App extends Serializable {
-  private def mergeMaps(l: Map[String, String], r: Map[String, String]) = {
-    val res = new HashMap[String, String]
-    l.foreach(res += _)
-    r.foreach(t => if (!res.contains(t._1)) res += t)
-    res.toMap
-  }
-
-  private def cli(args: Array[String]): Params = {
-    val parser = new scopt.OptionParser[Params]("WCS Indexer") {
-      head("Coreset tool", "1.0")
-      
-      opt[Unit]('v', "verbose") action {
-        (_, c) => c.copy(verbose = true)
-      } text ("verbose is a flag")
-      
-      opt[Unit]('d', "denseData") action {
-        (_, c) => c.copy(denseData = true)
-      } text ("vector data is dense rather than sparse")
-      
-      opt[Unit]('l', "localRDDs") action {
-        (_, c) => c.copy(localRDDs = true)
-      } text ("do all sampling locally in driver")
-      
-      opt[String]('a', "algorithm") required () action {
-        (x, c) => c.copy(alg = x)
-      } text ("supported algorithms are spark-kmeans, coreset-kmeans, coreset-svd")
-      
-      opt[String]("algorithmParams") required () action {
-        (x, c) => c.copy(algParams = x)
-      } text ("send paramaters to algorithm")
-  
-      opt[Int]("sampleSize") required () action {
-        (x, c) => c.copy(sampleSize = x)
-      } text("sample size for coresets")
-      
-      opt[Int]("batchSecs") required () action {
-        (x, c) => c.copy(batchSecs = x)
-      } text("mini batch size in seconds (for streaming)")
-      
-      opt[Int]("parallelism") required () action {
-        (x, c) => c.copy(parallelism = x)
-      } text("parallelism for effecting repartitioning")
-
-      opt[String]('c', "checkpointDir") optional () action {
-        (x, c) => c.copy(checkpointDir = x)
-      } text("the checkpointDir for spark, can be on FS or HDFS")
-
-      opt[String]('i', "input") required () action {
-        (x, c) => c.copy(input = x)
-      } text("input file or source")
-      
-      opt[String]('o', "output") required () action {
-        (x, c) => c.copy(output = x)
-      } text("the suffix of the path to use for output centers RDD")
-      
-      opt[String]('m', "mode") required () action {
-        (x, c) => c.copy(mode = x)
-      } text("mode can be 'bulk', 'streaming' or 'evaluate'")
-      
-      opt[Map[String, String]]("sparkParams") valueName ("k1=v1, k2=v2, ...") action {
-        (x, c) => c.copy(sparkParams = mergeMaps(x, c.sparkParams))
-      } text ("these are parameters to pass on for the spark configuration")
-
-      help("help") text ("for help contact royl@il.ibm.com")
-    }
-
-    val ores = parser.parse(args.toSeq, Params())
-    
-    if (ores.isEmpty) {
-      throw new RuntimeException("bad input paramaters")
-    }
-    
-    ores.get
-  }
-  
-  // TODO: fix this method
   def createCoresetAlg(params: Params): BaseCoresetAlgorithm = {
     val dense = params.denseData
     val alg = params.alg
@@ -216,18 +99,29 @@ object App extends Serializable {
     
     val a = alg.toLowerCase.trim 
     
-    if (a.endsWith("svd") && dense) {
-      new BaseCoresetAlgorithm(
-          denseAlg = Some(new SVDCoreset(algParams.toInt, sampleSize))
-      )
+    if (a.endsWith("svd")) {
+      if (dense) {
+        new BaseCoresetAlgorithm(
+            denseAlg = Some(new SVDCoreset(algParams.toInt, sampleSize))
+        )
+      }
+      else {
+        new BaseCoresetAlgorithm(
+            sparseAlg = Some(new SparseSVDCoreset(algParams.toInt, sampleSize))
+        )
+      }
     }
-//    else if (a.endsWith("svd") && !dense) {
-//      new SparseSVDCoreset(algParams.toInt, sampleSize)
-//    }
     else if (a.endsWith("kmeans")) {
-      new BaseCoresetAlgorithm(
-          denseAlg = Some(new NonUniformCoreset[WeightedDoublePoint](algParams.toInt, sampleSize))
-      )
+      if (dense) {
+        new BaseCoresetAlgorithm(
+            denseAlg = Some(new NonUniformCoreset[WeightedDoublePoint](algParams.toInt, sampleSize))
+        )
+      }
+      else {
+        new BaseCoresetAlgorithm(
+            sparseAlg = Some(new SparseNonUniformCoreset(algParams.toInt, sampleSize))
+        )        
+      }
     }
     else { 
       throw new RuntimeException(s"unknown algorithm ${alg}")
@@ -247,8 +141,23 @@ object App extends Serializable {
       centroids
     }
     
-    if ("coreset-kmeans" == params.alg && params.denseData) {
-      denseCoresetKmeans
+    def sparseCoresetKmeans(data: Iterable[WPoint]): Array[Vector] = {
+      val k = params.algParams.toInt
+      val kmeansAlg = new SparseWeightedKMeansPlusPlus(k)
+    
+      val sample = data.map(_.toSparseWeightableVector).toList.asJava
+      val centroids = kmeansAlg.cluster(sample).asScala.map(c => 
+        Vectors.sparse(
+            c.getCenter.getVector.getDimension, 
+            c.getCenter.getVector.iterator.asScala.map(ent => (ent.getIndex, ent.getValue)).toSeq
+        )
+      ).toArray
+      
+      centroids
+    }
+    
+    if ("coreset-kmeans" == params.alg) {
+      if (params.denseData) denseCoresetKmeans else sparseCoresetKmeans
     }
     else {
       throw new UnsupportedOperationException(s"${params.alg} in mode dense = ${params.denseData}")
@@ -331,6 +240,14 @@ object App extends Serializable {
   private def getRootDir(args: Array[String]): String = {
     if (args.length > 1) args(1) else System.getProperty("user.home")
   }
+
+  private def repartition[T](rdd: RDD[T], oNumParts: Option[Int]): RDD[T] = {
+    if (oNumParts.isDefined) rdd.repartition(oNumParts.get) else rdd
+  }
+  
+  private def repartition[T](dstream: DStream[T], oNumParts: Option[Int]): DStream[T] = {
+    if (oNumParts.isDefined) dstream.repartition(oNumParts.get) else dstream
+  }
   
   def evaluateCost(params: Params): Unit = {
     val sparkCheckpointDir = params.checkpointDir
@@ -345,15 +262,15 @@ object App extends Serializable {
     def parse = if (params.denseData) parseDense _ else parseSparse _
     
     val sc = new SparkContext(sparkConf)
-    val data = sc.textFile(inputFile).repartition(params.parallelism).map(parse).cache
+    val data = repartition(sc.textFile(inputFile), params.parallelism).map(parse).cache
     
     val calcCost = new CostCalc(sc)
 
     if (params.alg.endsWith("kmeans")) {
-      calcCost.calcCost(data, params.input, CostCalc.kmeansCost)
+      calcCost.calcCost(data, params.output, CostCalc.kmeansCost)
     }
     else if (params.alg.endsWith("svd")) {
-      calcCost.calcCost(data, params.input, CostCalc.svdCost)      
+      calcCost.calcCost(data, params.output, CostCalc.svdCost)      
     }
     else {
       throw new RuntimeException(s"${params.alg} not supported")
@@ -376,7 +293,7 @@ object App extends Serializable {
     val sc = new SparkContext(sparkConf)
     
     def parse = if (params.denseData) parseDense _ else parseSparse _
-    val data = sc.textFile(inputFile).repartition(params.parallelism).map(parse).cache
+    val data = repartition(sc.textFile(inputFile), params.parallelism).map(parse).cache
     
     val vecs: RDD[Array[Vector]] = if (params.alg.startsWith("coreset")) {
       val sampler = new TreeSampler[WPoint](
@@ -384,7 +301,7 @@ object App extends Serializable {
         new MySampleTaker(createCoresetAlg(params))
       )
       
-      val parallelism = params.parallelism
+      val parallelism = params.parallelism.getOrElse(100)
       val numPoints = data.count
       val optNumPointsPerPartition = params.sampleSize*numNodesToSample
       val optNumPartitions = numPoints/optNumPointsPerPartition
@@ -435,11 +352,11 @@ object App extends Serializable {
       ssc.socketTextStream(hostname, port)
     }
     else {
-      assert(params.input.startsWith("hdfs://") || params.input.startsWith("file://"))
+//      assert(params.input.startsWith("hdfs://") || params.input.startsWith("file://"))
       ssc.textFileStream(params.input)
     }
 
-    val data = lines.repartition(params.parallelism).map(parse).cache
+    val data = repartition(lines, params.parallelism).map(parse).cache
 
     val fileoutExt = getFileExt(params.output)
     val filename = params.output.substring(0, params.output.length - fileoutExt.length)
@@ -448,9 +365,15 @@ object App extends Serializable {
       val alg = createOnCoresetAlg(params)
       val samples = sampler.sample(data)
       
-      samples.transform(rdd => {
-        rdd.sparkContext.makeRDD(Seq(alg(rdd.collect)))
+      val resRDD = samples.transform(rdd => {
+        val arr = rdd.collect
+        
+        if (!arr.isEmpty) {
+          rdd.sparkContext.makeRDD(Seq(alg(arr)))
+        } else rdd.sparkContext.emptyRDD[Array[Vector]]
       })
+      
+      resRDD
     } else {
       val alg = createSparkAlg(params)
       data.transform(alg)

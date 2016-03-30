@@ -32,6 +32,9 @@ import univ.ml.sparse.algorithm.SparseCoresetAlgorithm
 import univ.ml.sparse.SparseSVDCoreset
 import univ.ml.sparse.algorithm.SparseNonUniformCoreset
 import univ.ml.sparse.SparseWeightedKMeansPlusPlus
+import java.util.concurrent.atomic.AtomicLong
+import scala.util.Random
+import java.util.concurrent.ConcurrentHashMap
 
 object MySampleTaker extends Serializable {
   val numNodesToSample = 2
@@ -68,16 +71,37 @@ class BaseCoresetAlgorithm(
   }
 }
 
+object Timer {
+  var startTime: Long = -1L
+
+  val tMap = new ConcurrentHashMap[Long, Boolean]
+  
+  val timer: AtomicLong = new AtomicLong(0L)
+}
+
 class MySampleTaker(alg: BaseCoresetAlgorithm) extends SampleTaker[WPoint] {
   override def take(oelms: Iterable[WPoint], sampleSize: Int): Iterable[WPoint] = {
     val elms = oelms // .map(_.toWeightedDoublePoint)
     
     val res = if (elms.size > sampleSize) {
+      val before = System.nanoTime
+      Timer.tMap.put(Thread.currentThread.getId, true)
       val rr = alg.takeSample(elms)
+      Timer.timer.addAndGet(System.nanoTime - before)
       require(rr.size <= sampleSize, s"requested sample size ${sampleSize} but got ${rr.size}")
       rr
     }
     else elms
+    
+    if (Random.nextInt(10) == 0) {
+      val s = 1000L*1000L*1000L
+      val numCPUs = Timer.tMap.size
+      val totalTime = numCPUs*((System.nanoTime - Timer.startTime)/s)
+      val samplingTime = Timer.timer.get/s
+      val ratio = samplingTime.toDouble/totalTime.toDouble
+      
+      println(s"sampling total CPU[${numCPUs}] time is ${samplingTime}/${totalTime} seconds which is ${100.0*ratio}%")
+    }
 
     res // .map(p => WPoint.create(p))
   }
@@ -219,6 +243,8 @@ object App extends Serializable {
   }
   
   def main(args: Array[String]) {    
+    Timer.startTime = System.nanoTime
+    
     val before = System.currentTimeMillis
     
     val params = cli(args)
@@ -241,6 +267,7 @@ object App extends Serializable {
     if (args.length > 1) args(1) else System.getProperty("user.home")
   }
 
+/*
   private def repartition[T](rdd: RDD[T], oNumParts: Option[Int]): RDD[T] = {
     if (oNumParts.isDefined) rdd.repartition(oNumParts.get) else rdd
   }
@@ -248,10 +275,39 @@ object App extends Serializable {
   private def repartition[T](dstream: DStream[T], oNumParts: Option[Int]): DStream[T] = {
     if (oNumParts.isDefined) dstream.repartition(oNumParts.get) else dstream
   }
+*/
+  
+  private def getLines(sc: SparkContext, params: Params): RDD[String] = {
+    if (params.parallelism.isDefined) {
+      sc.textFile(params.input, params.parallelism.get)
+    }
+    else {
+      sc.textFile(params.input)
+    }
+  }
+  
+  private def getLines(ssc: StreamingContext, params: Params): DStream[String] = {
+    val lines: DStream[String] = if (params.input.startsWith("socket://")) {
+      val hostport = params.input.substring("socket://".length).split(':')
+      require(hostport.length == 2)
+      val hostname = hostport(0)
+      val port = hostport(1).toInt
+      ssc.socketTextStream(hostname, port)
+    }
+    else {
+      ssc.textFileStream(params.input)
+    }
+    
+    if (params.parallelism.isDefined) {
+      lines.repartition(params.parallelism.get)
+    } else {
+      lines
+    }
+  }
   
   def evaluateCost(params: Params): Unit = {
     val sparkCheckpointDir = params.checkpointDir
-    val inputFile =  params.input
+//    val inputFile =  params.input
     
     val sparkConf = new SparkConf()
       .setAppName("EvaluateCost")
@@ -262,7 +318,7 @@ object App extends Serializable {
     def parse = if (params.denseData) parseDense _ else parseSparse _
     
     val sc = new SparkContext(sparkConf)
-    val data = repartition(sc.textFile(inputFile), params.parallelism).map(parse).cache
+    val data = getLines(sc, params).map(parse).cache
     
     val calcCost = new CostCalc(sc)
 
@@ -279,7 +335,7 @@ object App extends Serializable {
   
   def testBulk(params: Params): Unit = {
     val sparkCheckpointDir = params.checkpointDir
-    val inputFile =  params.input
+//    val inputFile =  params.input
     
     val sparkConf = new SparkConf()
       .setAppName("BulkCoresets")
@@ -293,7 +349,7 @@ object App extends Serializable {
     val sc = new SparkContext(sparkConf)
     
     def parse = if (params.denseData) parseDense _ else parseSparse _
-    val data = repartition(sc.textFile(inputFile), params.parallelism).map(parse).cache
+    val data = getLines(sc, params).map(parse).cache
     
     val vecs: RDD[Array[Vector]] = if (params.alg.startsWith("coreset")) {
       val sampler = new TreeSampler[WPoint](
@@ -343,20 +399,11 @@ object App extends Serializable {
     )
 
     def parse = if (params.denseData) parseDense _ else parseSparse _
+    
+    println("now!")
+    Thread.sleep(5000L)
 
-    val lines: DStream[String] = if (params.input.startsWith("socket://")) {
-      val hostport = params.input.substring("socket://".length).split(':')
-      require(hostport.length == 2)
-      val hostname = hostport(0)
-      val port = hostport(1).toInt
-      ssc.socketTextStream(hostname, port)
-    }
-    else {
-//      assert(params.input.startsWith("hdfs://") || params.input.startsWith("file://"))
-      ssc.textFileStream(params.input)
-    }
-
-    val data = repartition(lines, params.parallelism).map(parse).cache
+    val data = getLines(ssc, params).map(parse).cache
 
     val fileoutExt = getFileExt(params.output)
     val filename = params.output.substring(0, params.output.length - fileoutExt.length)

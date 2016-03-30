@@ -304,6 +304,7 @@ class StreamingTreeSampler[T](
     config: SamplerConfig, 
     sampleTaker: SampleTaker[T], 
     batchSecs: Int)(implicit m: ClassTag[T]) extends Serializable {
+  
   def sample(dstream: DStream[T], coreset: Iterable[T] => Unit = null): DStream[T] = {
     val ssc = dstream.context
     ssc.remember(Seconds(batchSecs*2))
@@ -332,16 +333,18 @@ class StreamingTreeSampler[T](
 
       val deltaT = System.currentTimeMillis - before
 
-      info(s"stream processing duration is $deltaT ms")
-      
 //      require(deltaT < 1000L*batchSecs, s"$deltaT")
 
-      if (res.isInstanceOf[RDDLikeWrapper[_]]) {
+      val rdyRDD = if (res.isInstanceOf[RDDLikeWrapper[_]]) {
         res.asInstanceOf[RDDLikeWrapper[T]].getSelf
       }
       else {
         rdd.sparkContext.makeRDD(res.collect.toSeq)
       }
+      
+      info(s"stream processing duration is $deltaT ms")
+      
+      rdyRDD
     })
   }  
 }

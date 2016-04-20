@@ -35,6 +35,7 @@ import univ.ml.sparse.SparseWeightedKMeansPlusPlus
 import java.util.concurrent.atomic.AtomicLong
 import scala.util.Random
 import java.util.concurrent.ConcurrentHashMap
+import java.util.Date
 
 object MySampleTaker extends Serializable {
   val numNodesToSample = 2
@@ -74,7 +75,7 @@ class BaseCoresetAlgorithm(
 object Timer {
   var startTime: Long = -1L
 
-  val tMap = new ConcurrentHashMap[Long, Boolean]
+  var numThreads: Int = 1
   
   val timer: AtomicLong = new AtomicLong(0L)
 }
@@ -85,7 +86,6 @@ class MySampleTaker(alg: BaseCoresetAlgorithm) extends SampleTaker[WPoint] {
     
     val res = if (elms.size > sampleSize) {
       val before = System.nanoTime
-      Timer.tMap.put(Thread.currentThread.getId, true)
       val rr = alg.takeSample(elms)
       Timer.timer.addAndGet(System.nanoTime - before)
       require(rr.size <= sampleSize, s"requested sample size ${sampleSize} but got ${rr.size}")
@@ -95,12 +95,12 @@ class MySampleTaker(alg: BaseCoresetAlgorithm) extends SampleTaker[WPoint] {
     
     if (Random.nextInt(10) == 0) {
       val s = 1000L*1000L*1000L
-      val numCPUs = Timer.tMap.size
+      val numCPUs = Timer.numThreads
       val totalTime = numCPUs*((System.nanoTime - Timer.startTime)/s)
       val samplingTime = Timer.timer.get/s
       val ratio = samplingTime.toDouble/totalTime.toDouble
       
-      println(s"sampling total CPU[${numCPUs}] time is ${samplingTime}/${totalTime} seconds which is ${100.0*ratio}%")
+      println(s"${new Date} sampling total CPU[${numCPUs}] time is ${samplingTime}/${totalTime} seconds which is ${100.0*ratio}%")
     }
 
     res // .map(p => WPoint.create(p))
@@ -248,6 +248,9 @@ object App extends Serializable {
     val before = System.currentTimeMillis
     
     val params = cli(args)
+    
+    Timer.numThreads = params.sparkParams.getOrElse("spark.master", "local[1]")
+      .substring("local[".length).replace("]", "").toInt
 
     params.mode.toLowerCase.trim match {
       case "bulk" => testBulk(params)
@@ -391,7 +394,7 @@ object App extends Serializable {
 
     val ssc = new StreamingContext(sparkConf, Seconds(params.batchSecs))
     ssc.checkpoint(sparkCheckpointDir)
-
+    
     val sampler = new StreamingTreeSampler[WPoint](
         SamplerConfig(numNodesToSample, params.sampleSize, params.localRDDs),
         new MySampleTaker(createCoresetAlg(params)),
@@ -400,9 +403,6 @@ object App extends Serializable {
 
     def parse = if (params.denseData) parseDense _ else parseSparse _
     
-    println("now!")
-    Thread.sleep(5000L)
-
     val data = getLines(ssc, params).map(parse).cache
 
     val fileoutExt = getFileExt(params.output)
@@ -428,9 +428,19 @@ object App extends Serializable {
     
     resDStream.saveAsObjectFiles(filename, fileoutExt)
     
+    
+    println("now!")
+    Thread.sleep(5000L)
+
     ssc.start
+    
+    println(s"[${new Date}] starting ...")
+
 //    ssc.awaitTermination(1000L*60L*15L)
     ssc.awaitTermination
+    ssc.stop(true)
+    
+    println(s"[${new Date}] done")
   }
   
   private def getFileExt(f: String): String = {

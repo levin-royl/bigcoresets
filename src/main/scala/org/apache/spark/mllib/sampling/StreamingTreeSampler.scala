@@ -281,6 +281,8 @@ class TreeSampler[T](
         currIndexedSamples = nextIndexedSamples.cache
       } while (chg && currIndexedSamples.count > 1L)
 
+      info(s"treeSample reduce completed after ${iter} iterations")
+
       currIndexedSamples
     }
     else {

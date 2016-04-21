@@ -75,7 +75,7 @@ class BaseCoresetAlgorithm(
 object Timer {
   var startTime: Long = -1L
 
-  var numThreads: Int = 1
+  var numThreads: Int = -1
   
   val timer: AtomicLong = new AtomicLong(0L)
 }
@@ -85,15 +85,20 @@ class MySampleTaker(alg: BaseCoresetAlgorithm) extends SampleTaker[WPoint] {
     val elms = oelms // .map(_.toWeightedDoublePoint)
     
     val res = if (elms.size > sampleSize) {
-      val before = System.nanoTime
+      val before = if (Timer.numThreads > 0) System.nanoTime else 0L
+      
       val rr = alg.takeSample(elms)
-      Timer.timer.addAndGet(System.nanoTime - before)
+      
+      if (Timer.numThreads > 0) {
+        Timer.timer.addAndGet(System.nanoTime - before)
+      }
+      
       require(rr.size <= sampleSize, s"requested sample size ${sampleSize} but got ${rr.size}")
       rr
     }
     else elms
     
-    if (Random.nextInt(10) == 0) {
+    if (Timer.numThreads > 0 && Random.nextInt(10) == 0) {
       val s = 1000L*1000L*1000L
       val numCPUs = Timer.numThreads
       val totalTime = numCPUs*((System.nanoTime - Timer.startTime)/s)
@@ -249,7 +254,7 @@ object App extends Serializable {
     
     val params = cli(args)
     
-    Timer.numThreads = params.sparkParams.getOrElse("spark.master", "local[1]")
+    Timer.numThreads = params.sparkParams.getOrElse("spark.master", "local[-1]")
       .substring("local[".length).replace("]", "").toInt
 
     params.mode.toLowerCase.trim match {

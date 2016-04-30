@@ -3,6 +3,9 @@
 #hadoop fs -rmr /user/royl/data/streamin
 #hadoop fs -mkdir /user/royl/data/streamin
 
+rm -rf wiki-out
+mkdir wiki-out
+
 rm -rf ~/data/coresets/streamin
 mkdir ~/data/coresets/streamin
 
@@ -20,7 +23,8 @@ for f in wiki_vecs/*; do
 	j=$((j + 1))
 
 	if [ "$i" -eq "80" ]; then
-		sleep 2000
+		echo "sleeping ..."
+		sleep 600
 		i=0
 	fi
 done

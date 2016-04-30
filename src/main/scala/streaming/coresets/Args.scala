@@ -9,6 +9,8 @@ object Args {
     denseData: Boolean = false,
   
     localRDDs: Boolean = false,
+    
+    generateProfile: Boolean = false,
   
     alg: String = "",
   
@@ -57,6 +59,10 @@ object Args {
       opt[Unit]('l', "localRDDs") action {
         (_, c) => c.copy(localRDDs = true)
       } text ("do all sampling locally in driver")
+      
+      opt[Unit]('p', "generateProfile") action {
+        (_, c) => c.copy(generateProfile = true)
+      } text ("generate runtime profile information about sampling time (works only in local[])")
       
       opt[String]('a', "algorithm") required () action {
         (x, c) => c.copy(alg = x)

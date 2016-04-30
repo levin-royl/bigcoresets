@@ -307,7 +307,10 @@ class StreamingTreeSampler[T](
     sampleTaker: SampleTaker[T], 
     batchSecs: Int)(implicit m: ClassTag[T]) extends Serializable {
   
-  def sample(dstream: DStream[T], coreset: Iterable[T] => Unit = null): DStream[T] = {
+  def sample(
+      dstream: DStream[T], 
+      preCoreset: RDD[T] => Unit = null,
+      postCoreset: Iterable[T] => Unit = null): DStream[T] = {
     val ssc = dstream.context
     ssc.remember(Seconds(batchSecs*2))
 
@@ -316,6 +319,10 @@ class StreamingTreeSampler[T](
 
     dstream.transform(rdd => {
       val before = System.currentTimeMillis
+      
+      if (preCoreset != null) {
+        preCoreset(rdd)
+      }
 
       val origNumPartitions = rdd.partitions.length
       val currFlatTreeSample = config.createRDDLike(treeSampler.flatTreeSample(rdd))
@@ -331,8 +338,10 @@ class StreamingTreeSampler[T](
 
       val res = treeSampler.sampleFromTreeToRDD(cachedCurrTreeSample)
 
-      if (coreset != null) coreset(res.collect)
-
+      if (postCoreset != null) {
+        postCoreset(res.collect)
+      }
+      
       val deltaT = System.currentTimeMillis - before
 
 //      require(deltaT < 1000L*batchSecs, s"$deltaT")

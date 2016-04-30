@@ -10,7 +10,7 @@ import org.apache.spark.mllib.linalg.distributed.RowMatrix
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.RDD.doubleRDDToDoubleRDDFunctions
 
-import Domain.WPoint
+import Domain._
 
 class CostCalc(sc: SparkContext) extends Serializable {
   def rddName(path: Path): String = {
@@ -28,14 +28,14 @@ class CostCalc(sc: SparkContext) extends Serializable {
 
     var i = 1
 //    val data = points.map(p => Vectors.dense(p.toWeightedDoublePoint.getPoint)) // .cache
-    val data = points.map(_.toVector).cache
+    val data = points.map(_.toVector).zipWithIndex.cache
 
     println(s"path\t#batch\tcost\tk\t|D|\tstats")
 
     for (path <- resultsPaths) {
       val pathName = rddName(path)
       
-      val resRDD = sc.objectFile[Array[Vector]](pathName)
+      val resRDD = sc.objectFile[ComputedResult](pathName)
       
       if (!resRDD.isEmpty) {
         println(s"now opening RDD from ${pathName}")
@@ -56,9 +56,10 @@ class CostCalc(sc: SparkContext) extends Serializable {
           set.iterator.next
         }
         
-        val cost = evalFunc(res, data)
+        val totalNumPoints = res.totalNumPoints
+        val cost = evalFunc(res.points, data.filter(_._2 < totalNumPoints).keys)
         
-        println(s"$pathName\t$i\t$cost\t${res.length}\t${single(res.map(_.size))}\t${stats(res.map(vec => mean(vec)))}")
+        println(s"$pathName\t$i\t$cost\t${res.points.length}\t${single(res.points.map(_.size))}\t${stats(res.points.map(vec => mean(vec)))}")
         i += 1
       }
       else println(s"skipping empty result ${pathName}")

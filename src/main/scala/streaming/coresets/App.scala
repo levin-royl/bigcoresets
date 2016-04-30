@@ -18,9 +18,7 @@ import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.dstream.DStream
 import Args.Params
 import Args.cli
-import Domain.WPoint
-import Domain.parseDense
-import Domain.parseSparse
+import Domain._
 import MySampleTaker.numNodesToSample
 import univ.ml.BaseCoreset
 import univ.ml.NonUniformCoreset
@@ -36,8 +34,11 @@ import java.util.concurrent.atomic.AtomicLong
 import scala.util.Random
 import java.util.concurrent.ConcurrentHashMap
 import java.util.Date
+import java.util.concurrent.atomic.AtomicInteger
+import org.apache.spark.Logging
+import org.apache.spark.Logging
 
-object MySampleTaker extends Serializable {
+object MySampleTaker extends Serializable with Logging {
   val numNodesToSample = 2
 }
 
@@ -80,7 +81,7 @@ object Timer {
   val timer: AtomicLong = new AtomicLong(0L)
 }
 
-class MySampleTaker(alg: BaseCoresetAlgorithm) extends SampleTaker[WPoint] {
+class MySampleTaker(alg: BaseCoresetAlgorithm) extends SampleTaker[WPoint] with Logging {
   override def take(oelms: Iterable[WPoint], sampleSize: Int): Iterable[WPoint] = {
     val elms = oelms // .map(_.toWeightedDoublePoint)
     
@@ -105,21 +106,23 @@ class MySampleTaker(alg: BaseCoresetAlgorithm) extends SampleTaker[WPoint] {
       val samplingTime = Timer.timer.get/s
       val ratio = samplingTime.toDouble/totalTime.toDouble
       
-      println(s"${new Date} sampling total CPU[${numCPUs}] time is ${samplingTime}/${totalTime} seconds which is ${100.0*ratio}%")
+      logWarning(s"${new Date} sampling total CPU[${numCPUs}] time is ${samplingTime}/${totalTime} seconds which is ${100.0*ratio}%")
     }
 
     res // .map(p => WPoint.create(p))
   }
 
   override def takeIds(elmsWithIds: Iterable[(Int, WPoint)], sampleSize: Int): Set[Int] = {
-    elmsWithIds.foreach{ case(id, elm) => elm.id = id }
+    val map = elmsWithIds.map(_.swap).toMap
+    
     val sample = take(elmsWithIds.map(_._2), sampleSize)
-
-    sample.map(_.id).toSet
+    val res = sample.map(p => map.get(p).get).toSet
+    
+    res
   }
 }
 
-object App extends Serializable {
+object App extends Serializable with Logging {
   def createCoresetAlg(params: Params): BaseCoresetAlgorithm = {
     val dense = params.denseData
     val alg = params.alg
@@ -254,8 +257,13 @@ object App extends Serializable {
     
     val params = cli(args)
     
-    Timer.numThreads = params.sparkParams.getOrElse("spark.master", "local[-1]")
-      .substring("local[".length).replace("]", "").toInt
+    Timer.numThreads = if (params.generateProfile) {
+      require(params.sparkParams.contains("spark.master"))
+      
+      params.sparkParams.getOrElse("spark.master", "local[-1]")
+        .substring("local[".length).replace("]", "").toInt
+    }
+    else -1
 
     params.mode.toLowerCase.trim match {
       case "bulk" => testBulk(params)
@@ -264,7 +272,7 @@ object App extends Serializable {
       case _ => throw new RuntimeException(s"${params.mode} not supported")
     }
     
-    println(s"total runtime is ${(System.currentTimeMillis - before)/1000L} seconds")
+    logWarning(s"total runtime is ${(System.currentTimeMillis - before)/1000L} seconds")
   }
   
   private def getInputSource(args: Array[String]): String = {
@@ -370,7 +378,7 @@ object App extends Serializable {
       val optNumPointsPerPartition = params.sampleSize*numNodesToSample
       val optNumPartitions = numPoints/optNumPointsPerPartition
       val numPartitions = ((optNumPartitions/parallelism)*parallelism).toInt
-      println(s"repartitioning rdd from ${data.partitions.length} to ${numPartitions}")
+      logWarning(s"repartitioning rdd from ${data.partitions.length} to ${numPartitions}")
       val samples = sampler.sample(data)
       
       val alg = createOnCoresetAlg(params)
@@ -386,10 +394,12 @@ object App extends Serializable {
   
   def testStreaming(params: Params): Unit = {
     val sparkCheckpointDir = params.checkpointDir
+    val lookBacktime = 3600L*1000L
 
     val sparkConf = new SparkConf()
       .setAppName("StreaimingCoresets")
       .set("spark.ui.showConsoleProgress", "false")
+      .set("spark.streaming.fileStream.minRememberDuration", lookBacktime.toString)
 //      .set("spark.streaming.receiver.maxRate", (1024*32).toString)
 //      .set("spark.streaming.receiver.writeAheadLog.enable", "true")
 //      .set("spark.streaming.backpressure.enabled", "true")
@@ -413,39 +423,90 @@ object App extends Serializable {
     val fileoutExt = getFileExt(params.output)
     val filename = params.output.substring(0, params.output.length - fileoutExt.length)
     
+    val totalNumOfPoints = new AtomicLong(0L)
+    val latestPointCount = new AtomicLong(0L)
+    val latestSampleSize = new AtomicInteger(0)
+    
     val resDStream: DStream[Array[Vector]] = if (params.alg.startsWith("coreset")) {
       val alg = createOnCoresetAlg(params)
-      val samples = sampler.sample(data)
+      val samples = sampler.sample(
+          data, 
+          preCoreset = rdd => { 
+            val cnt = rdd.count
+            latestPointCount.set(cnt)
+            totalNumOfPoints.addAndGet(cnt)
+          },
+          postCoreset = it => latestSampleSize.set(it.size)
+      )
       
-      val resRDD = samples.transform(rdd => {
+      val resStream = samples.transform(rdd => {
         val arr = rdd.collect
         
-        if (!arr.isEmpty) {
+        val resRDD = if (!arr.isEmpty) {
           rdd.sparkContext.makeRDD(Seq(alg(arr)))
         } else rdd.sparkContext.emptyRDD[Array[Vector]]
+        
+        resRDD
       })
       
-      resRDD
+      resStream
     } else {
       val alg = createSparkAlg(params)
       data.transform(alg)
     }
     
-    resDStream.saveAsObjectFiles(filename, fileoutExt)
+    val computedResults = resDStream
+      .map(mat => ComputedResult(
+          mat, 
+          System.currentTimeMillis,
+          totalNumOfPoints.get,
+          latestPointCount.get, 
+          latestSampleSize.get,
+          params.alg
+      ))
+      
+    computedResults.filter(_.numPoints > 0).saveAsObjectFiles(filename, fileoutExt)
+    
+    // time to quit?
+    val lastZeroTime = new AtomicLong(-1L)
+    
+    computedResults.foreachRDD(crRDD => {
+      val cnt = crRDD.count
+
+      if (cnt > 0) {
+        assert(cnt == 1L)
+        
+        val single = crRDD.first
+        val isZero = single.numPoints == 0
+        val currTime = single.time
+        
+        logWarning(s"is zero = $isZero")
+        
+        if (!isZero) {
+          lastZeroTime.set(-1L)
+        }
+        else if (lastZeroTime.get == -1L) {
+          lastZeroTime.set(currTime)
+        }
+        else if (currTime - lastZeroTime.get > lookBacktime) {
+          logWarning(s"${isZero} (${(currTime - lastZeroTime.get)/1000L} secs) Good Bye.")
+  //        ssc.stop(true)
+          System.exit(0)
+        }
+      }
+    })
     
     
-    println("now!")
-    Thread.sleep(5000L)
+    logWarning("now!")
+    Thread.sleep(10000L)
 
     ssc.start
     
-    println(s"[${new Date}] starting ...")
+    logWarning(s"[${new Date}] starting ...")
 
-//    ssc.awaitTermination(1000L*60L*15L)
     ssc.awaitTermination
-    ssc.stop(true)
     
-    println(s"[${new Date}] done")
+    logWarning(s"[${new Date}] done")
   }
   
   private def getFileExt(f: String): String = {

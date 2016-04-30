@@ -9,6 +9,15 @@ import scala.collection.JavaConverters._
 import java.util.HashMap
 
 object Domain {
+  case class ComputedResult(
+      points: Array[Vector],
+      time: Long,
+      totalNumPoints: Long,
+      numPoints: Long,
+      sampleSize: Int,
+      algName: String
+  ) extends Serializable
+  
   def createWeightedPoint(coords: Array[Double], w: Double = 1.0): WeightedDoublePoint = {
     new WeightedDoublePoint(coords, w, "")
   }
@@ -58,8 +67,6 @@ object Domain {
   }
   
   trait WPoint extends Serializable {
-    var id: Int = -1
-    
     def isSparse: Boolean
     
     def toWeightedDoublePoint: WeightedDoublePoint
@@ -67,6 +74,16 @@ object Domain {
     def toSparseWeightableVector: SparseWeightableVector
     
     def toVector: Vector
+    
+    override def hashCode(): Int = toVector.hashCode
+    
+    override def equals(other: Any): Boolean = {
+      if (other.isInstanceOf[WPoint]) {
+        val that = other.asInstanceOf[WPoint]
+        (this eq that) || toVector.equals(that.toVector)
+      }
+      else false
+    }
   }
   
   class DenseWPoint(inner: WeightedDoublePoint) extends WPoint {

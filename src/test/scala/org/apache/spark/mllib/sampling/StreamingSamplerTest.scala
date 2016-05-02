@@ -104,4 +104,15 @@ class StreamingSamplerTest extends Serializable {
     
     assertEquals(1, node.size)
   }
+  
+  @Test
+  def testJoin(): Unit = {
+    val s1 = Seq(1, 2, 3, 4, 5).map(i => (i, i.toString))
+    val s2 = Seq(2, 3, 5).map(i => (i, i.toString))
+    
+    val rdd1 = sc.makeRDD(s1)
+    val rdd2 = sc.makeRDD(s2)
+    
+    val joinedRDD = rdd1.join(rdd2)
+  }
 }

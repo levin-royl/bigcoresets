@@ -30,7 +30,7 @@ case class SamplerConfig(
 trait SampleTaker[T] extends Serializable {
   def take(elms: Iterable[T], sampleSize: Int): Iterable[T]
 
-  def takeIds(elmsWithIds: Iterable[(Int, T)], sampleSize: Int): Set[Int]
+  def takeIds(elmsWithIds: Iterable[(Int, T)], sampleSize: Int): Iterable[Int]
 }
 
 object TreeSampler extends Serializable with Logging {
@@ -38,6 +38,7 @@ object TreeSampler extends Serializable with Logging {
 }
 
 import org.apache.spark.mllib.sampling.TreeSampler._
+import org.apache.spark.SparkContext
 
 // RDDLike stuff
 trait RDDLike[T] extends Serializable {
@@ -56,7 +57,7 @@ trait RDDLike[T] extends Serializable {
   def union(other: RDDLike[T]): RDDLike[T]
   
   def filter(f: T => Boolean): RDDLike[T]
-
+  
   def map[U: ClassTag](f: T => U): RDDLike[U]
 
   def flatMap[U: ClassTag](f: T => TraversableOnce[U]): RDDLike[U]
@@ -66,6 +67,12 @@ trait RDDLike[T] extends Serializable {
   def cache: RDDLike[T]
 
   def checkpoint: Unit
+  
+  def sortBy[K](
+    f: (T) => K,
+    ascending: Boolean = true,
+    numPartitions: Int = numPartitions)
+    (implicit ord: Ordering[K], ctag: ClassTag[K]): RDDLike[T]
 }
 
 class RDDLikeIterable[T](self: Iterable[T]) extends RDDLike[T] {
@@ -102,6 +109,18 @@ class RDDLikeIterable[T](self: Iterable[T]) extends RDDLike[T] {
   def cache: RDDLike[T] = this
   
   def checkpoint: Unit = {}
+  
+  def sortBy[K](
+    f: (T) => K,
+    ascending: Boolean = true,
+    numPartitions: Int = numPartitions)
+    (implicit ord: Ordering[K], ctag: ClassTag[K]): RDDLike[T] = {
+
+    val resSeq = self.toSeq.sortBy(f)
+    val finalResSeq = if (ascending) resSeq else resSeq.reverse
+    
+    new RDDLikeIterable(finalResSeq)
+  }
 }
 
 class RDDLikeWrapper[T](self: RDD[T]) extends RDDLike[T] {
@@ -138,6 +157,15 @@ class RDDLikeWrapper[T](self: RDD[T]) extends RDDLike[T] {
   def cache: RDDLike[T] = new RDDLikeWrapper(getSelf.cache)
   
   def checkpoint: Unit = getSelf.checkpoint
+  
+  def sortBy[K](
+    f: (T) => K,
+    ascending: Boolean = true,
+    numPartitions: Int = numPartitions)
+    (implicit ord: Ordering[K], ctag: ClassTag[K]): RDDLike[T] = {
+
+    new RDDLikeWrapper(self.sortBy(f, ascending, numPartitions))
+  }
 }
 
 class PairRDDLikeFunctions[K, V](self: RDDLike[(K, V)])
@@ -180,6 +208,33 @@ extends Serializable {
   
   def mapValues[U](f: V => U): RDDLike[(K, U)] = 
     op(iter => iter.map(pair => (pair._1, f(pair._2))), rdd => rdd.mapValues(f))
+
+  def join[U](other: RDDLike[(K, U)]): RDDLike[(K, (V, U))] = {
+    if (other.isInstanceOf[RDDLikeIterable[(K, U)]]) {
+      require(self.isInstanceOf[RDDLikeIterable[(K, V)]])
+      
+      val me = selfIter.get
+      val that = other.asInstanceOf[RDDLikeIterable[(K, U)]]
+      val thatMap = that.getSelf.groupBy(_._1)
+      
+      val resIt = me.flatMap{ case(key, v1) => {
+        val those = thatMap.get(key).getOrElse(Iterable.empty)
+        those.map{ case(_, v2) => (key, (v1, v2)) }
+      }}
+      
+      new RDDLikeIterable(resIt)
+    }
+    else {
+      require(self.isInstanceOf[RDDLikeWrapper[(K, V)]])
+      require(other.isInstanceOf[RDDLikeWrapper[(K, U)]])
+
+      val me = selfRDD.get
+      val that = other.asInstanceOf[RDDLikeWrapper[(K, U)]].getSelf
+      val resRDD = me.join(that)
+      
+      new RDDLikeWrapper(resRDD)
+    }
+  }
     
   private def iterReduceByKey(iter: Iterable[(K, V)], func: (V, V) => V): Iterable[(K, V)] = {
     val map = new HashMap[K, V]
@@ -206,6 +261,15 @@ object RDDLike {
     (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null): PairRDDLikeFunctions[K, V] = {
     new PairRDDLikeFunctions(rdd)
   }
+
+  def toRDD[T: ClassTag](rddLike: RDDLike[T], sc: SparkContext): RDD[T] = {
+    if (rddLike.isInstanceOf[RDDLikeWrapper[_]]) {
+      rddLike.asInstanceOf[RDDLikeWrapper[T]].getSelf
+    }
+    else {
+      sc.makeRDD(rddLike.collect.toSeq)
+    }
+  }
 }
 
 // tree sampler
@@ -230,9 +294,9 @@ class TreeSampler[T](
     val elms = rdd.flatMap{ case(_, sc) => sc.sample }
       .zipWithIndex.map{ case(elm, id) => (id.toInt, elm) }
 
-    val ids = sampleTaker.takeIds(elms.collect, config.sampleSize)
+    val ids = new RDDLikeIterable(sampleTaker.takeIds(elms.collect, config.sampleSize)).zipWithIndex
 
-    elms.filter{ case(id, _) => ids.contains(id) }.values
+    ids.join(elms).values.sortBy(_._1).values
   }
   
   private[sampling] 
@@ -306,8 +370,52 @@ class StreamingTreeSampler[T](
     config: SamplerConfig, 
     sampleTaker: SampleTaker[T], 
     batchSecs: Int)(implicit m: ClassTag[T]) extends Serializable {
+
+  def defaultSample(dstream: DStream[T]): DStream[T] = {
+    sample(dstream, (rdd, s) => s)
+  }
   
-  def sample(
+  def sample[RT: ClassTag](
+      dstream: DStream[T], 
+      processSample: (RDD[T], RDDLike[T]) => RDDLike[RT]): DStream[RT] = {
+
+    val ssc = dstream.context
+    ssc.remember(Seconds(batchSecs*2))
+
+    var stateTreeSample: RDDLike[(Layer, SampleContainer[T])] = null
+    val treeSampler = new TreeSampler[T](config, sampleTaker)
+
+    dstream.transform(rdd => {
+      val before = System.currentTimeMillis
+
+      val origNumPartitions = rdd.partitions.length
+      val currFlatTreeSample = config.createRDDLike(treeSampler.flatTreeSample(rdd))
+      val nextRawTreeSample = if (stateTreeSample != null) {
+        stateTreeSample.union(currFlatTreeSample).repartition(origNumPartitions)
+      } else currFlatTreeSample
+      
+      val currTreeSample = treeSampler.treeSample(nextRawTreeSample).repartition(origNumPartitions)
+      
+      currTreeSample.checkpoint
+      val cachedCurrTreeSample = currTreeSample.cache
+      stateTreeSample = cachedCurrTreeSample
+
+      val res = processSample(rdd, treeSampler.sampleFromTreeToRDD(cachedCurrTreeSample))
+
+      val deltaT = System.currentTimeMillis - before
+
+//      require(deltaT < 1000L*batchSecs, s"$deltaT")
+      
+      val rdyRDD: RDD[RT] = RDDLike.toRDD(res, rdd.sparkContext)
+      
+      info(s"stream processing duration is $deltaT ms")
+      
+      rdyRDD
+    })
+  }
+  
+  @Deprecated
+  def oldSample(
       dstream: DStream[T], 
       preCoreset: RDD[T] => Unit = null,
       postCoreset: Iterable[T] => Unit = null): DStream[T] = {

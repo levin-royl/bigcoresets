@@ -11,11 +11,10 @@ import java.util.HashMap
 object Domain {
   case class ComputedResult(
       points: Array[Vector],
-      time: Long,
-      totalNumPoints: Long,
       numPoints: Long,
       sampleSize: Int,
-      algName: String
+      algName: String,
+      time: Long = System.currentTimeMillis
   ) extends Serializable
   
   def createWeightedPoint(coords: Array[Double], w: Double = 1.0): WeightedDoublePoint = {

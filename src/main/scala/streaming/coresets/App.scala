@@ -37,6 +37,10 @@ import java.util.Date
 import java.util.concurrent.atomic.AtomicInteger
 import org.apache.spark.Logging
 import org.apache.spark.Logging
+import org.apache.spark.mllib.sampling.RDDLike
+import org.apache.spark.mllib.sampling.RDDLikeWrapper
+import org.apache.spark.mllib.sampling.RDDLikeIterable
+import org.apache.spark.streaming.Milliseconds
 
 object MySampleTaker extends Serializable with Logging {
   val numNodesToSample = 2
@@ -89,6 +93,9 @@ class MySampleTaker(alg: BaseCoresetAlgorithm) extends SampleTaker[WPoint] with 
       val before = if (Timer.numThreads > 0) System.nanoTime else 0L
       
       val rr = alg.takeSample(elms)
+
+      // TODO: debug
+      println(s"pre-sample size = ${elms.size} and post-sample size = ${rr.size}")
       
       if (Timer.numThreads > 0) {
         Timer.timer.addAndGet(System.nanoTime - before)
@@ -112,13 +119,12 @@ class MySampleTaker(alg: BaseCoresetAlgorithm) extends SampleTaker[WPoint] with 
     res // .map(p => WPoint.create(p))
   }
 
-  override def takeIds(elmsWithIds: Iterable[(Int, WPoint)], sampleSize: Int): Set[Int] = {
+  override def takeIds(elmsWithIds: Iterable[(Int, WPoint)], sampleSize: Int): Iterable[Int] = {
     val map = elmsWithIds.map(_.swap).toMap
     
     val sample = take(elmsWithIds.map(_._2), sampleSize)
-    val res = sample.map(p => map.get(p).get).toSet
     
-    res
+    sample.map(p => map.get(p).get)
   }
 }
 
@@ -196,8 +202,10 @@ object App extends Serializable with Logging {
     }
   }
   
-  def createSparkAlg(params: Params): (RDD[WPoint] => RDD[Array[Vector]]) = {    
-    def sparkStreaingKMeans(data: RDD[WPoint]): RDD[Array[Vector]] = {
+  def createSparkAlg(params: Params): (RDD[WPoint] => RDD[ComputedResult]) = { 
+    val algName = params.alg
+    
+    def sparkStreaingKMeans(data: RDD[WPoint]): RDD[ComputedResult] = {
       val k = params.algParams.toInt
       val kmeansAlg = new StreamingKMeans()
         .setK(k)
@@ -210,19 +218,24 @@ object App extends Serializable with Logging {
       
       model = model.update(points, kmeansAlg.decayFactor, kmeansAlg.timeUnit)
       val centers = model.clusterCenters
+      val cnt = data.count
+      val res = ComputedResult(centers, cnt, cnt.toInt, algName)
 
-      data.sparkContext.makeRDD(Seq(centers))
+      data.sparkContext.makeRDD(Seq(res))
     }
     
-    def sparkBulkKmeans(data: RDD[WPoint]): RDD[Array[Vector]] = {
+    def sparkBulkKmeans(data: RDD[WPoint]): RDD[ComputedResult] = {
       val points = data.map(_.toVector).cache
       val model = KMeans.train(points, params.algParams.toInt, Int.MaxValue)
       
       val centers = model.clusterCenters
-      data.sparkContext.makeRDD(Seq(centers))
+      val cnt = data.count
+      val res = ComputedResult(centers, cnt, cnt.toInt, algName)
+      
+      data.sparkContext.makeRDD(Seq(res))
     }
 
-    def denseBulkSparkSVD(data: RDD[WPoint]): RDD[Array[Vector]] = {
+    def denseBulkSparkSVD(data: RDD[WPoint]): RDD[ComputedResult] = {
       val rows = data.map(_.toVector).cache
       val mat = new RowMatrix(rows)
 
@@ -233,7 +246,10 @@ object App extends Serializable with Logging {
       val Vents = (0 until V.numRows)
         .map(i => Vectors.dense((0 until V.numCols).map(j => V(i, j)).toArray)).toArray
       
-      data.sparkContext.makeRDD(Seq(Vents))
+      val cnt = data.count
+      val res = ComputedResult(Vents, cnt, cnt.toInt, algName)
+      
+      data.sparkContext.makeRDD(Seq(res))
     }
     
     if ("spark-kmeans" == params.alg && "bulk" == params.mode) {
@@ -367,7 +383,7 @@ object App extends Serializable with Logging {
     def parse = if (params.denseData) parseDense _ else parseSparse _
     val data = getLines(sc, params).map(parse).cache
     
-    val vecs: RDD[Array[Vector]] = if (params.alg.startsWith("coreset")) {
+    val vecs: RDD[ComputedResult] = if (params.alg.startsWith("coreset")) {
       val sampler = new TreeSampler[WPoint](
         SamplerConfig(numNodesToSample, params.sampleSize, params.localRDDs),
         new MySampleTaker(createCoresetAlg(params))
@@ -379,10 +395,13 @@ object App extends Serializable with Logging {
       val optNumPartitions = numPoints/optNumPointsPerPartition
       val numPartitions = ((optNumPartitions/parallelism)*parallelism).toInt
       logWarning(s"repartitioning rdd from ${data.partitions.length} to ${numPartitions}")
-      val samples = sampler.sample(data)
       
       val alg = createOnCoresetAlg(params)
-      sc.makeRDD(Seq(alg(samples)))
+      def processSample = makeProcessSample(alg, params.alg)
+      val algRes = sampler.sample(data)
+      val rddLikeRes = processSample(data, new RDDLikeIterable(algRes))
+      
+      RDDLike.toRDD(rddLikeRes, data.sparkContext)
     }
     else {
       val alg = createSparkAlg(params)
@@ -390,6 +409,29 @@ object App extends Serializable with Logging {
     }
     
     vecs.saveAsObjectFile(s"${params.output}")
+  }
+  
+  private def makeProcessSample(
+      alg: Iterable[WPoint] => Array[Vector],
+      algName: String): (RDD[WPoint], RDDLike[WPoint]) => RDDLike[ComputedResult] = {
+    
+    (rdd: RDD[WPoint], sample: RDDLike[WPoint]) => {
+      val dataSize = rdd.count
+      val localSample = sample.collect
+
+      println(s"data size = ${dataSize} final sample size = ${localSample.size}")
+
+      val mat = if (dataSize > 0) {
+        alg(localSample)
+      }
+      else {
+        Array.empty[Vector]
+      }
+
+      new RDDLikeIterable(Seq(
+          ComputedResult(mat, dataSize, localSample.size, algName))
+      )
+    }
   }
   
   def testStreaming(params: Params): Unit = {
@@ -423,82 +465,39 @@ object App extends Serializable with Logging {
     val fileoutExt = getFileExt(params.output)
     val filename = params.output.substring(0, params.output.length - fileoutExt.length)
     
-    val totalNumOfPoints = new AtomicLong(0L)
-    val latestPointCount = new AtomicLong(0L)
-    val latestSampleSize = new AtomicInteger(0)
-    
-    val resDStream: DStream[Array[Vector]] = if (params.alg.startsWith("coreset")) {
+    val computedResults: DStream[ComputedResult] = if (params.alg.startsWith("coreset")) {
       val alg = createOnCoresetAlg(params)
-      val samples = sampler.sample(
-          data, 
-          preCoreset = rdd => { 
-            val cnt = rdd.count
-            latestPointCount.set(cnt)
-            totalNumOfPoints.addAndGet(cnt)
-          },
-          postCoreset = it => latestSampleSize.set(it.size)
-      )
+      def processSample = makeProcessSample(alg, params.alg)
       
-      val resStream = samples.transform(rdd => {
-        val arr = rdd.collect
-        
-        val resRDD = if (!arr.isEmpty) {
-          rdd.sparkContext.makeRDD(Seq(alg(arr)))
-        } else rdd.sparkContext.emptyRDD[Array[Vector]]
-        
-        resRDD
-      })
-      
-      resStream
-    } else {
+      sampler.sample(data, processSample)
+    } 
+    else {
       val alg = createSparkAlg(params)
+      
       data.transform(alg)
     }
     
-    val computedResults = resDStream
-      .map(mat => ComputedResult(
-          mat, 
-          System.currentTimeMillis,
-          totalNumOfPoints.get,
-          latestPointCount.get, 
-          latestSampleSize.get,
-          params.alg
-      ))
-      
     computedResults.filter(_.numPoints > 0).saveAsObjectFiles(filename, fileoutExt)
-    
-    // time to quit?
-    val lastZeroTime = new AtomicLong(-1L)
-    
-    computedResults.foreachRDD(crRDD => {
-      val cnt = crRDD.count
 
-      if (cnt > 0) {
-        assert(cnt == 1L)
-        
-        val single = crRDD.first
-        val isZero = single.numPoints == 0
-        val currTime = single.time
-        
-        logWarning(s"is zero = $isZero")
-        
-        if (!isZero) {
-          lastZeroTime.set(-1L)
-        }
-        else if (lastZeroTime.get == -1L) {
-          lastZeroTime.set(currTime)
-        }
-        else if (currTime - lastZeroTime.get > lookBacktime) {
-          logWarning(s"${isZero} (${(currTime - lastZeroTime.get)/1000L} secs) Good Bye.")
-  //        ssc.stop(true)
-          System.exit(0)
-        }
+    val sumInWin = computedResults.map(_.numPoints).reduceByWindow(
+        reduceFunc = _ + _, 
+        invReduceFunc = _ - _, 
+        Milliseconds(lookBacktime),
+        Milliseconds(lookBacktime/2L)
+    )
+    
+    sumInWin.foreachRDD(rdd => {
+      assert(rdd.isEmpty || rdd.count == 1)
+      
+      if (!rdd.isEmpty && rdd.first == 0) {
+        logWarning(s"Good Bye!")
+        System.exit(0)
       }
     })
     
     
     logWarning("now!")
-    Thread.sleep(10000L)
+    Thread.sleep(30000L)
 
     ssc.start
     

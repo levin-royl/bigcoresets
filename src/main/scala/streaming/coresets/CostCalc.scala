@@ -29,6 +29,7 @@ class CostCalc(sc: SparkContext) extends Serializable {
     var i = 1
 //    val data = points.map(p => Vectors.dense(p.toWeightedDoublePoint.getPoint)) // .cache
     val data = points.map(_.toVector).zipWithIndex.cache
+    var totalNumPoints = 0L
 
     println(s"path\t#batch\tcost\tk\t|D|\tstats")
 
@@ -56,7 +57,7 @@ class CostCalc(sc: SparkContext) extends Serializable {
           set.iterator.next
         }
         
-        val totalNumPoints = res.totalNumPoints
+        totalNumPoints += res.numPoints
         val cost = evalFunc(res.points, data.filter(_._2 < totalNumPoints).keys)
         
         println(s"$pathName\t$i\t$cost\t${res.points.length}\t${single(res.points.map(_.size))}\t${stats(res.points.map(vec => mean(vec)))}")

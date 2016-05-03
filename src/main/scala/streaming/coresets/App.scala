@@ -95,7 +95,7 @@ class MySampleTaker(alg: BaseCoresetAlgorithm) extends SampleTaker[WPoint] with 
       val rr = alg.takeSample(elms)
 
       // TODO: debug
-      println(s"pre-sample size = ${elms.size} and post-sample size = ${rr.size}")
+//      println(s"pre-sample size = ${elms.size} and post-sample size = ${rr.size}")
       
       if (Timer.numThreads > 0) {
         Timer.timer.addAndGet(System.nanoTime - before)
@@ -419,7 +419,7 @@ object App extends Serializable with Logging {
       val dataSize = rdd.count
       val localSample = sample.collect
 
-      println(s"data size = ${dataSize} final sample size = ${localSample.size}")
+//      println(s"data size = ${dataSize} final sample size = ${localSample.size}")
 
       val mat = if (dataSize > 0) {
         alg(localSample)

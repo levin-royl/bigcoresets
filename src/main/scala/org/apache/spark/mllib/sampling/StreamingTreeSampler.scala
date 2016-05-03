@@ -47,6 +47,8 @@ trait RDDLike[T] extends Serializable {
   def count: Long
   
   def numPartitions: Int
+  
+  def first: T
 
   def collect: Iterable[T]
   
@@ -83,6 +85,8 @@ class RDDLikeIterable[T](self: Iterable[T]) extends RDDLike[T] {
   def numPartitions: Int = 1
   
   def count: Long = self.size
+  
+  def first: T = self.head
   
   def collect: Iterable[T] = self
 
@@ -131,6 +135,8 @@ class RDDLikeWrapper[T](self: RDD[T]) extends RDDLike[T] {
   def count: Long = self.count
   
   def numPartitions: Int = self.partitions.length
+  
+  def first: T = self.first
   
   def collect: Iterable[T] = self.collect
 
@@ -210,7 +216,22 @@ extends Serializable {
     op(iter => iter.map(pair => (pair._1, f(pair._2))), rdd => rdd.mapValues(f))
 
   def join[U](other: RDDLike[(K, U)]): RDDLike[(K, (V, U))] = {
-    if (other.isInstanceOf[RDDLikeIterable[(K, U)]]) {
+    if (self.isInstanceOf[RDDLikeIterable[(K, V)]] != other.isInstanceOf[RDDLikeIterable[(K, U)]]) {
+      require(self.isInstanceOf[RDDLikeWrapper[(K, V)]] || other.isInstanceOf[RDDLikeWrapper[(K, U)]])
+      
+      if (self.isInstanceOf[RDDLikeIterable[(K, V)]]) {
+        assert(other.isInstanceOf[RDDLikeWrapper[(K, U)]])
+        val rddSc = other.asInstanceOf[RDDLikeWrapper[(K, U)]].getSelf.sparkContext
+        return new RDDLikeWrapper(rddSc.makeRDD(self.collect.toSeq)).join(other)
+      }
+      else {
+        assert(self.isInstanceOf[RDDLikeWrapper[(K, V)]])
+        assert(other.isInstanceOf[RDDLikeIterable[(K, U)]])
+        val rddSc = self.asInstanceOf[RDDLikeWrapper[(K, V)]].getSelf.sparkContext
+        return self.join(new RDDLikeWrapper(rddSc.makeRDD(other.collect.toSeq)))
+      }
+    }
+    else if (other.isInstanceOf[RDDLikeIterable[(K, U)]]) {
       require(self.isInstanceOf[RDDLikeIterable[(K, V)]])
       
       val me = selfIter.get
@@ -222,7 +243,7 @@ extends Serializable {
         those.map{ case(_, v2) => (key, (v1, v2)) }
       }}
       
-      new RDDLikeIterable(resIt)
+      return new RDDLikeIterable(resIt)
     }
     else {
       require(self.isInstanceOf[RDDLikeWrapper[(K, V)]])
@@ -232,7 +253,7 @@ extends Serializable {
       val that = other.asInstanceOf[RDDLikeWrapper[(K, U)]].getSelf
       val resRDD = me.join(that)
       
-      new RDDLikeWrapper(resRDD)
+      return new RDDLikeWrapper(resRDD)
     }
   }
     

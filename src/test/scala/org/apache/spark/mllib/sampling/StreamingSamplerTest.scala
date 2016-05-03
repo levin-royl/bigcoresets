@@ -6,40 +6,12 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
 
-class StreamingSamplerTest extends Serializable {
-  private val conf = new SparkConf()
-    .set("spark.app.name", "UnitTest")
-    .set("spark.master", "local[2]")
+import TestUtils._
+import SparkTestConf._
 
-  private val sc = new SparkContext(conf)
-
-  class TestSampleTaker extends SampleTaker[Int] {
-    private def smallest(iter: Iterable[Int], sampleSize: Int): Iterable[Int] = {
-      val arr = iter.toArray.sortBy(i => i)
-      val step = arr.length/sampleSize
-      
-      (0 until arr.length by step).map(i => arr(i))
-    }
-
-    override def take(elms: Iterable[Int], sampleSize: Int): Iterable[Int] = {
-      val res = if (elms.size > sampleSize) {
-        smallest(elms, sampleSize)
-      }
-      else elms
-  
-      res
-    }
-  
-    override def takeIds(elmsWithIds: Iterable[(Int, Int)], sampleSize: Int): Set[Int] = {
-      val withIds = elmsWithIds.map{ case(id, elm) => elm }
-      val sample = take(withIds, sampleSize)
-  
-      sample.toSet
-    }
-  }
-
+class StreamingSamplerTest {
   val sampler = new TreeSampler(SamplerConfig(2, 5, true), new TestSampleTaker)
-    
+
   val rdd = sc.makeRDD(0 until 110, 11)
   assertEquals(11, rdd.partitions.length)
 
@@ -98,21 +70,60 @@ class StreamingSamplerTest extends Serializable {
   }
   
   @Test
-  def testTreeSampleToSingleItem(): Unit = {
-    val tree = sampler.treeSample(new RDDLikeIterable(sampler.flatTreeSample(rdd).collect))
-    val node = sampler.sampleFromTree(tree)
-    
-    assertEquals(1, node.size)
-  }
-  
-  @Test
   def testJoin(): Unit = {
     val s1 = Seq(1, 2, 3, 4, 5).map(i => (i, i.toString))
-    val s2 = Seq(2, 3, 5).map(i => (i, i.toString))
+    val s2 = Seq(2, 3, 5, 5).map(i => (i, i.toDouble))
     
     val rdd1 = sc.makeRDD(s1)
     val rdd2 = sc.makeRDD(s2)
     
-    val joinedRDD = rdd1.join(rdd2)
+    testJoin(new RDDLikeWrapper(rdd1.join(rdd2)))
+    
+    val itLike1 = new RDDLikeIterable(s1)
+    val rddLike1 = new RDDLikeWrapper(rdd1)
+    
+    val itLike2 = new RDDLikeIterable(s2)
+    val rddLike2 = new RDDLikeWrapper(rdd2)
+    
+    testJoin(itLike1.join(itLike2))
+    testJoin(rddLike1.join(rddLike2))
+    
+    testJoin(itLike1.join(rddLike2))
+    testJoin(rddLike1.join(itLike2))
+  }
+  
+  private def testJoin(joinedRDD: RDDLike[(Int, (String, Double))]): Unit = {
+    assertEquals(4L, joinedRDD.count)
+    
+    assertEquals(("2", 2.0), joinedRDD.filter(_._1 == 2).values.single)
+    assertEquals(("3", 3.0), joinedRDD.filter(_._1 == 3).values.single)
+    assertEquals(Array(("5", 5.0), ("5", 5.0)).mkString(","), joinedRDD.filter(_._1 == 5).values.collect.mkString(","))
+  }
+}
+
+
+// mock objects:
+class TestSampleTaker extends SampleTaker[Int] {
+  private def smallest(iter: Iterable[Int], sampleSize: Int): Iterable[Int] = {
+    val arr = iter.toArray.sortBy(i => i)
+    val step = arr.length/sampleSize
+    
+    (0 until arr.length by step).map(i => arr(i))
+  }
+
+  override def take(elms: Iterable[Int], sampleSize: Int): Iterable[Int] = {
+    val res = if (elms.size > sampleSize) {
+      smallest(elms, sampleSize)
+    }
+    else elms
+
+    res
+  }
+
+  override def takeIds(elmsWithIds: Iterable[(Int, Int)], sampleSize: Int): Set[Int] = {
+    val withIds = elmsWithIds.map{ case(id, elm) => elm }
+    val sample = take(withIds, sampleSize)
+
+    sample.toSet
   }
 }

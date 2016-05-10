@@ -14,25 +14,25 @@ echo " OK"
 i=0
 j=0
 
-for f in ${files[@]}; do
-        before=`date +%s%3N`
+for f in ${files[@]}; do 
+	before=`date +%s%3N`
 
-        echo "[$j][$i] Copying $f";
+	echo "[$j][$i] Copying $f"; 
 
         hadoop fs -cp $f hdfs:///user/spark/tmp/.
         hadoop fs -mv hdfs:///user/spark/tmp/* hdfs:///user/spark/streamin/.
 
-        i=$((i + 1))
-        j=$((j + 1))
+	i=$((i + 1))
+	j=$((j + 1))
 
-        after=`date +%s%3N`
-        delta=$(( after - before ))
+	after=`date +%s%3N`
+	delta=$(( after - before ))
 
-        echo took $delta milliseconds
+	echo took $delta milliseconds
 
-        if [ "$i" -ge "1" ]; then
-                echo "sleeping ..."
-                sleep 300
-                i=0
-        fi
+	if [ "$i" -ge "1" ]; then
+		echo "sleeping ..."
+		sleep 300
+		i=0
+	fi
 done

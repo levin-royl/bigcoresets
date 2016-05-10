@@ -6,8 +6,8 @@
 rm -rf wiki-out
 mkdir wiki-out
 
-rm -rf ~/data/coresets/streamin
-mkdir ~/data/coresets/streamin
+rm -rf streamin
+mkdir streamin
 
 read -p "Press any key to continue... " -n1 -s
 echo " OK"
@@ -17,14 +17,14 @@ j=0
 for f in wiki_vecs/*; do 
 	echo "[$j][$i] Copying $f"; 
 #	hadoop fs -put $f /user/royl/data/streamin/.
-	cp $f ~/data/coresets/streamin/.
+	cp $f streamin/.
 
 	i=$((i + 1))
 	j=$((j + 1))
 
 	if [ "$i" -eq "80" ]; then
 		echo "sleeping ..."
-		sleep 600
+		sleep 1500
 		i=0
 	fi
 done

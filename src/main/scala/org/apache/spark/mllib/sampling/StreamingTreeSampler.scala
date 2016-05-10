@@ -9,6 +9,12 @@ import org.apache.spark.Logging
 
 import scala.collection.mutable.HashMap
 
+object GenUtil {
+  def mylog(msg: String): Unit = {
+    println(s"${new java.util.Date} --- $msg")
+  }
+}
+
 // public domain classes
 case class SamplerConfig(
     numNodesToSample: Int,
@@ -34,11 +40,14 @@ trait SampleTaker[T] extends Serializable {
 }
 
 object TreeSampler extends Serializable with Logging {
-  def info(msg: String): Unit = logWarning(msg)
+	def info(msg: String): Unit = GenUtil.mylog(msg)
+//  def info(msg: String): Unit = logWarning(msg)
 }
 
 import org.apache.spark.mllib.sampling.TreeSampler._
 import org.apache.spark.SparkContext
+import java.util.Date
+import java.util.Date
 
 // RDDLike stuff
 trait RDDLike[T] extends Serializable {
@@ -401,7 +410,7 @@ class StreamingTreeSampler[T](
       processSample: (RDD[T], RDDLike[T]) => RDDLike[RT]): DStream[RT] = {
 
     val ssc = dstream.context
-    ssc.remember(Seconds(batchSecs*2))
+//    ssc.remember(Seconds(batchSecs*2))
 
     var stateTreeSample: RDDLike[(Layer, SampleContainer[T])] = null
     val treeSampler = new TreeSampler[T](config, sampleTaker)
@@ -441,7 +450,7 @@ class StreamingTreeSampler[T](
       preCoreset: RDD[T] => Unit = null,
       postCoreset: Iterable[T] => Unit = null): DStream[T] = {
     val ssc = dstream.context
-    ssc.remember(Seconds(batchSecs*2))
+//    ssc.remember(Seconds(batchSecs*2))
 
     var stateTreeSample: RDDLike[(Layer, SampleContainer[T])] = null
     val treeSampler = new TreeSampler[T](config, sampleTaker)

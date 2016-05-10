@@ -21,18 +21,27 @@ class CostCalc(sc: SparkContext) extends Serializable {
       points: RDD[WPoint], 
       pathToResults: String,
       evalFunc: (Array[Vector], RDD[Vector]) => Double): Unit = {
+    
     val before = System.currentTimeMillis
     
-    val fs = FileSystem.get(sc.hadoopConfiguration)
-    val resultsPaths = fs.listStatus(new Path(pathToResults)).map(_.getPath)
-
-    var i = 1
-//    val data = points.map(p => Vectors.dense(p.toWeightedDoublePoint.getPoint)) // .cache
-    val data = points.map(_.toVector).zipWithIndex.cache
+    val totalCount = points.count
     var totalNumPoints = 0L
 
-    println(s"path\t#batch\tcost\tk\t|D|\tstats")
+    println(s"indexing ${totalCount} points")
+    
+//    val data = points.map(p => Vectors.dense(p.toWeightedDoublePoint.getPoint)) // .cache
+    val data = {
+      val d = points.map(_.toVector).zipWithIndex
+      d.checkpoint
+      d.cache
+    }
+    
+    println(s"path\tsampleSize\tnumPoints\ttotal\t#batch\tcost\tk\t|D|\tstats")
 
+    val fs = FileSystem.get(sc.hadoopConfiguration)
+    val resultsPaths = fs.listStatus(new Path(pathToResults)).map(_.getPath)
+    var i = 1
+    
     for (path <- resultsPaths) {
       val pathName = rddName(path)
       
@@ -60,7 +69,7 @@ class CostCalc(sc: SparkContext) extends Serializable {
         totalNumPoints += res.numPoints
         val cost = evalFunc(res.points, data.filter(_._2 < totalNumPoints).keys)
         
-        println(s"$pathName\t$i\t$cost\t${res.points.length}\t${single(res.points.map(_.size))}\t${stats(res.points.map(vec => mean(vec)))}")
+        println(s"$pathName\t${res.sampleSize}\t${res.numPoints}\t${totalNumPoints}/${totalCount}\t$i\t$cost\t${res.points.length}\t${single(res.points.map(_.size))}\t${stats(res.points.map(vec => mean(vec)))}")
         i += 1
       }
       else println(s"skipping empty result ${pathName}")

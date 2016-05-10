@@ -40,7 +40,10 @@ import org.apache.spark.Logging
 import org.apache.spark.mllib.sampling.RDDLike
 import org.apache.spark.mllib.sampling.RDDLikeWrapper
 import org.apache.spark.mllib.sampling.RDDLikeIterable
+import org.apache.spark.mllib.sampling.GenUtil._
 import org.apache.spark.streaming.Milliseconds
+import univ.ml.UniformCoreset
+import univ.ml.sparse.algorithm.SparseUniformCoreset
 
 object MySampleTaker extends Serializable with Logging {
   val numNodesToSample = 2
@@ -113,7 +116,7 @@ class MySampleTaker(alg: BaseCoresetAlgorithm) extends SampleTaker[WPoint] with 
       val samplingTime = Timer.timer.get/s
       val ratio = samplingTime.toDouble/totalTime.toDouble
       
-      logWarning(s"${new Date} sampling total CPU[${numCPUs}] time is ${samplingTime}/${totalTime} seconds which is ${100.0*ratio}%")
+      mylog(s"${new Date} sampling total CPU[${numCPUs}] time is ${samplingTime}/${totalTime} seconds which is ${100.0*ratio}%")
     }
 
     res // .map(p => WPoint.create(p))
@@ -151,14 +154,28 @@ object App extends Serializable with Logging {
     }
     else if (a.endsWith("kmeans")) {
       if (dense) {
-        new BaseCoresetAlgorithm(
-            denseAlg = Some(new NonUniformCoreset[WeightedDoublePoint](algParams.toInt, sampleSize))
-        )
+        if (!a.contains("uniform")) {
+          new BaseCoresetAlgorithm(
+              denseAlg = Some(new NonUniformCoreset[WeightedDoublePoint](algParams.toInt, sampleSize))
+          )
+        }
+        else {
+          new BaseCoresetAlgorithm(
+              denseAlg = Some(new UniformCoreset[WeightedDoublePoint](sampleSize))
+          )
+        }
       }
       else {
-        new BaseCoresetAlgorithm(
-            sparseAlg = Some(new SparseNonUniformCoreset(algParams.toInt, sampleSize))
-        )        
+        if (!a.contains("uniform")) {
+          new BaseCoresetAlgorithm(
+              sparseAlg = Some(new SparseNonUniformCoreset(algParams.toInt, sampleSize))
+          )
+        }
+        else {
+          new BaseCoresetAlgorithm(
+              sparseAlg = Some(new SparseUniformCoreset(sampleSize))
+          )          
+        }
       }
     }
     else { 
@@ -168,6 +185,8 @@ object App extends Serializable with Logging {
   
   def createOnCoresetAlg(params: Params): (Iterable[WPoint] => Array[Vector]) = {
     def denseCoresetKmeans(data: Iterable[WPoint]): Array[Vector] = {
+      mylog(s"running denseCoresetKmeans on ${data.size} points")
+      
       val k = params.algParams.toInt
       val kmeansAlg = new WeightedKMeansPlusPlusClusterer[WeightedDoublePoint](k)
     
@@ -180,6 +199,8 @@ object App extends Serializable with Logging {
     }
     
     def sparseCoresetKmeans(data: Iterable[WPoint]): Array[Vector] = {
+      mylog(s"running sparseCoresetKmeans on ${data.size} points")
+      
       val k = params.algParams.toInt
       val kmeansAlg = new SparseWeightedKMeansPlusPlus(k)
     
@@ -267,6 +288,8 @@ object App extends Serializable with Logging {
   }
   
   def main(args: Array[String]) {    
+    mylog("starting up ...")
+    
     Timer.startTime = System.nanoTime
     
     val before = System.currentTimeMillis
@@ -288,7 +311,7 @@ object App extends Serializable with Logging {
       case _ => throw new RuntimeException(s"${params.mode} not supported")
     }
     
-    logWarning(s"total runtime is ${(System.currentTimeMillis - before)/1000L} seconds")
+    mylog(s"total runtime is ${(System.currentTimeMillis - before)/1000L} seconds")
   }
   
   private def getInputSource(args: Array[String]): String = {
@@ -350,7 +373,13 @@ object App extends Serializable with Logging {
     def parse = if (params.denseData) parseDense _ else parseSparse _
     
     val sc = new SparkContext(sparkConf)
-    val data = getLines(sc, params).map(parse).cache
+    sc.setCheckpointDir(sparkCheckpointDir)
+    
+    val data = getLines(sc, params).map(parse)
+    
+    data.checkpoint
+    
+    println(s"processing data points on ${data.partitions.length} partitions")
     
     val calcCost = new CostCalc(sc)
 
@@ -379,6 +408,7 @@ object App extends Serializable with Logging {
     params.sparkParams.foreach{ case(key, value) => sparkConf.set(key, value) }
     
     val sc = new SparkContext(sparkConf)
+    sc.setCheckpointDir(sparkCheckpointDir)
     
     def parse = if (params.denseData) parseDense _ else parseSparse _
     val data = getLines(sc, params).map(parse).cache
@@ -394,7 +424,7 @@ object App extends Serializable with Logging {
       val optNumPointsPerPartition = params.sampleSize*numNodesToSample
       val optNumPartitions = numPoints/optNumPointsPerPartition
       val numPartitions = ((optNumPartitions/parallelism)*parallelism).toInt
-      logWarning(s"repartitioning rdd from ${data.partitions.length} to ${numPartitions}")
+      mylog(s"repartitioning rdd from ${data.partitions.length} to ${numPartitions}")
       
       val alg = createOnCoresetAlg(params)
       def processSample = makeProcessSample(alg, params.alg)
@@ -419,7 +449,7 @@ object App extends Serializable with Logging {
       val dataSize = rdd.count
       val localSample = sample.collect
 
-//      println(s"data size = ${dataSize} final sample size = ${localSample.size}")
+      mylog(s"data size = ${dataSize} final sample size = ${localSample.size}")
 
       val mat = if (dataSize > 0) {
         alg(localSample)
@@ -436,7 +466,7 @@ object App extends Serializable with Logging {
   
   def testStreaming(params: Params): Unit = {
     val sparkCheckpointDir = params.checkpointDir
-    val lookBacktime = 3600L*1000L
+    val lookBacktime = 2L*3600L*1000L
 
     val sparkConf = new SparkConf()
       .setAppName("StreaimingCoresets")
@@ -451,6 +481,7 @@ object App extends Serializable with Logging {
 
     val ssc = new StreamingContext(sparkConf, Seconds(params.batchSecs))
     ssc.checkpoint(sparkCheckpointDir)
+    ssc.remember(Milliseconds(lookBacktime))
     
     val sampler = new StreamingTreeSampler[WPoint](
         SamplerConfig(numNodesToSample, params.sampleSize, params.localRDDs),
@@ -490,22 +521,22 @@ object App extends Serializable with Logging {
       assert(rdd.isEmpty || rdd.count == 1)
       
       if (!rdd.isEmpty && rdd.first == 0) {
-        logWarning(s"Good Bye!")
+        mylog(s"Good Bye!")
         System.exit(0)
       }
     })
     
     
-    logWarning("now!")
-    Thread.sleep(30000L)
+    mylog("now!")
+    Thread.sleep(60000L)
 
     ssc.start
     
-    logWarning(s"[${new Date}] starting ...")
+    mylog(s"[${new Date}] starting ...")
 
     ssc.awaitTermination
     
-    logWarning(s"[${new Date}] done")
+    mylog(s"[${new Date}] done")
   }
   
   private def getFileExt(f: String): String = {

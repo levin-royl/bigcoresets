@@ -32,7 +32,7 @@ for f in ${files[@]}; do
 
 	if [ "$i" -ge "1" ]; then
 		echo "sleeping ..."
-		sleep 300
+		sleep 4500
 		i=0
 	fi
 done

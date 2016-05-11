@@ -10,7 +10,7 @@ spark-submit --class streaming.coresets.App \
 	--executor-cores 2 \
 	--num-executors 10 \
 	--conf spark.driver.maxResultSize=20g \
-	target/bigcoresets-1.0.jar \
+	proj/bigcoresets/target/bigcoresets-1.0.jar \
 		--checkpointDir hdfs:///user/royl/checkpoint \
 		--denseData \
 		-v \

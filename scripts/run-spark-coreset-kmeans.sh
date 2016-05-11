@@ -17,7 +17,7 @@ spark-submit \
 	--executor-cores 8 \
 	--num-executors 10 \
 	--conf spark.driver.maxResultSize=20g \
-	bigcoresets-1.0.jar \
+	proj/bigcoresets/target/bigcoresets-1.0.jar \
 		--checkpointDir hdfs:///user/spark/checkpoint \
 		-v \
 		-i hdfs:///user/spark/streamin \

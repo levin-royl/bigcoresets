@@ -2,7 +2,8 @@
 
 #		-i socket://ir-cluster02.haifa.ibm.com:9999 \
 
-spark-submit --class streaming.coresets.App \
+spark-submit \
+	--class streaming.coresets.App \
 	--master yarn \
 	--deploy-mode client \
 	--queue Social_Analytics \
@@ -14,9 +15,9 @@ spark-submit --class streaming.coresets.App \
 	--conf spark.driver.maxResultSize=20g \
 	--conf spark.streaming.receiver.maxRate=32768 \
 	--conf spark.streaming.receiver.writeAheadLog.enable=true \
-    --conf spark.executor.extraJavaOptions=-XX:+PrintGCDetails \
-    --conf spark.executor.extraJavaOptions=-XX:+HeapDumpOnOutOfMemoryError \
-	bigcoresets-1.0.jar \
+    	--conf spark.executor.extraJavaOptions=-XX:+PrintGCDetails \
+    	--conf spark.executor.extraJavaOptions=-XX:+HeapDumpOnOutOfMemoryError \
+	proj/bigcoresets/target/bigcoresets-1.0.jar \
 		--checkpointDir hdfs:///user/royl/checkpoint \
 		--denseData \
 		-v \

@@ -191,10 +191,15 @@ object App extends Serializable with Logging {
       val kmeansAlg = new WeightedKMeansPlusPlusClusterer[WeightedDoublePoint](k)
     
       val sample = data.map(_.toWeightedDoublePoint).toList.asJava
+      
+      mylog(s"got sample of size ${sample.size}")
+      
       val centroids = kmeansAlg.cluster(sample).asScala.map(c => 
         Vectors.dense(c.getCenter.getPoint)
       ).toArray
       
+      mylog(s"computed ${centroids.size} centroids")
+
       centroids
     }
     
@@ -205,12 +210,17 @@ object App extends Serializable with Logging {
       val kmeansAlg = new SparseWeightedKMeansPlusPlus(k)
     
       val sample = data.map(_.toSparseWeightableVector).toList.asJava
+      
+      mylog(s"got sample of size ${sample.size}")
+      
       val centroids = kmeansAlg.cluster(sample).asScala.map(c => 
         Vectors.sparse(
             c.getCenter.getVector.getDimension, 
             c.getCenter.getVector.iterator.asScala.map(ent => (ent.getIndex, ent.getValue)).toSeq
         )
       ).toArray
+      
+      mylog(s"computed ${centroids.size} centroids")
       
       centroids
     }

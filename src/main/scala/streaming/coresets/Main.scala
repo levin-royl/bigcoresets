@@ -17,6 +17,7 @@ import univ.ml.WeightedDoublePoint
 import scala.collection.JavaConverters._
 import univ.ml.BaseCoreset
 import univ.ml.WeightedKMeansPlusPlusClusterer
+import org.apache.spark.mllib.recommendation.ALS
 
 object Main extends Serializable {
   val hostname = "localhost"
@@ -60,6 +61,14 @@ object Main extends Serializable {
     ssc.remember(Seconds(batchSecs*2))
     ssc.checkpoint(sparkCheckpointDir)
 //    ssc.sparkContext.setCheckpointDir(sparkCheckpointDir)
+    
+    // just testing stuff
+    {
+      val sc = ssc.sparkContext
+      val model = ALS.train(sc.emptyRDD, 10, 100)
+      
+      val pre = model.predict(0, 0)
+    }
     
     var stateIndexedSamples: RDD[(Layer, SampleContainer)] = null // ssc.sparkContext.emptyRDD
 

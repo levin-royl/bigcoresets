@@ -476,7 +476,7 @@ object App extends Serializable with Logging {
   
   def testStreaming(params: Params): Unit = {
     val sparkCheckpointDir = params.checkpointDir
-    val lookBacktime = 2L*3600L*1000L
+    val lookBacktime = 60L*params.batchSecs.toLong*1000L
 
     val sparkConf = new SparkConf()
       .setAppName("StreaimingCoresets")

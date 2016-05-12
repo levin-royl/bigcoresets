@@ -237,11 +237,12 @@ object App extends Serializable with Logging {
     val algName = params.alg
     
     def sparkStreaingKMeans(data: RDD[WPoint]): RDD[ComputedResult] = {
+      val dim = params.dim
       val k = params.algParams.toInt
       val kmeansAlg = new StreamingKMeans()
         .setK(k)
         .setDecayFactor(1.0)
-        .setRandomCenters(2, 0.0)
+        .setRandomCenters(dim, 0.0)
   
       var model = kmeansAlg.latestModel
   

@@ -23,6 +23,7 @@ spark-submit \
 		-i hdfs:///user/spark/streamin \
 		-o hdfs:///user/spark/streaming-coreset-kmeans-out/artho.vec \
 		-a coreset-kmeans \
+		--dim 100000 \
 		--algorithmParams 100 \
 		--sampleSize 256 \
 		--batchSecs 100 \

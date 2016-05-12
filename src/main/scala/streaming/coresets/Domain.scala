@@ -59,10 +59,14 @@ object Domain {
   }
   
   implicit class SparseWeightableVectorHelper(p: SparseWeightableVector) extends Serializable {
-    def toVector(): Vector = Vectors.sparse(
-        p.getDimension, 
-        p.sparseIterator.asScala.map(ent => (ent.getIndex, ent.getValue)).toSeq
-    )
+    def toVector(): Vector = {
+      val res = Vectors.sparse(
+          p.getDimension, 
+          p.sparseIterator.asScala.map(ent => (ent.getIndex, ent.getValue)).toSeq
+      )
+      
+      res
+    }
   }
   
   trait WPoint extends Serializable {
@@ -107,10 +111,12 @@ object Domain {
     override def toSparseWeightableVector: SparseWeightableVector = inner
 
     override def toVector: Vector = {
-      Vectors.sparse(
+      val res = Vectors.sparse(
           inner.getDimension, 
           inner.iterator.asScala.map(ent => (ent.getIndex, ent.getValue)).toSeq
       )
+      
+      res
     }
   }
   

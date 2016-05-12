@@ -16,6 +16,8 @@ object Args {
   
     algParams: String = "",
     
+    dim: Int = -1,
+    
     sampleSize: Int = -1,
     
     batchSecs: Int = 10,
@@ -72,6 +74,10 @@ object Args {
         (x, c) => c.copy(algParams = x)
       } text ("send paramaters to algorithm")
   
+      opt[Int]("dim") required () action {
+        (x, c) => c.copy(dim = x)
+      } text("dimensions for vectors")
+      
       opt[Int]("sampleSize") optional () action {
         (x, c) => c.copy(sampleSize = x)
       } text("sample size for coresets")

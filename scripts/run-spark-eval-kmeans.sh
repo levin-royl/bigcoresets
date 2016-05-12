@@ -12,11 +12,10 @@ spark-submit --class streaming.coresets.App \
 	--conf spark.driver.maxResultSize=20g \
 	proj/bigcoresets/target/bigcoresets-1.0.jar \
 		--checkpointDir hdfs:///user/royl/checkpoint \
-		--denseData \
 		-v \
 		-i hdfs:///user/royl/data/big.txt \
 		-o hdfs:///user/royl/data/out/streaming-coreset-kmeans \
 		-a coreset-kmeans \
-		--algorithmParams 100 \
+		--algorithmParams 10 \
 		--parallelism 10 \
 		-m evaluate

@@ -5,8 +5,8 @@
 hadoop fs -rmr hdfs:///user/spark/checkpoint
 hadoop fs -mkdir hdfs:///user/spark/checkpoint
 
-hadoop fs -rmr hdfs:///user/spark/streaming-coreset-uniform-kmeans-out
-hadoop fs -mkdir hdfs:///user/spark/streaming-coreset-uniform-kmeans-out
+hadoop fs -rmr hdfs:///user/spark/streaming-spark-kmeans-out
+hadoop fs -mkdir hdfs:///user/spark/streaming-spark-kmeans-out
 
 spark-submit \
 	--class streaming.coresets.App \
@@ -21,8 +21,8 @@ spark-submit \
 		--checkpointDir hdfs:///user/spark/checkpoint \
 		-v \
 		-i hdfs:///user/spark/streamin \
-		-o hdfs:///user/spark/streaming-coreset-uniform-kmeans-out/artho.vec \
-		-a coreset-uniform-kmeans \
+		-o hdfs:///user/spark/streaming-spark-kmeans-out/artho.vec \
+		-a spark-kmeans \
 		--dim 100000 \
 		--algorithmParams 100 \
 		--sampleSize 256 \

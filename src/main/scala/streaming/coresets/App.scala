@@ -19,6 +19,7 @@ import org.apache.spark.streaming.dstream.DStream
 import Args.Params
 import Args.cli
 import Domain._
+import GenUtil._
 import MySampleTaker.numNodesToSample
 import univ.ml.BaseCoreset
 import univ.ml.NonUniformCoreset
@@ -225,8 +226,34 @@ object App extends Serializable with Logging {
       centroids
     }
     
+    def sparseCoresetSVD(data: Iterable[WPoint]): Array[Vector] = {
+      mylog(s"running sparseCoresetSVD on ${data.size} points")
+      
+      val k = params.algParams.toInt
+      // TODO: Artem --- replace with SparseWeightedSVD here
+      val svdAlg = new SparseWeightedKMeansPlusPlus(k)
+    
+      val sample = data.map(_.toSparseWeightableVector).toList.asJava
+      
+      mylog(s"got sample of size ${sample.size}")
+      
+      val axis = svdAlg.cluster(sample).asScala.map(c => 
+        Vectors.sparse(
+            c.getCenter.getVector.getDimension, 
+            c.getCenter.getVector.iterator.asScala.map(ent => (ent.getIndex, ent.getValue)).toSeq
+        )
+      ).toArray
+      
+      mylog(s"computed ${axis.size} axis")
+      
+      axis
+    }
+    
     if ("coreset-kmeans" == params.alg) {
       if (params.denseData) denseCoresetKmeans else sparseCoresetKmeans
+    }
+    else if ("coreset-kmeans" == params.alg && !params.denseData) {
+      sparseCoresetSVD
     }
     else {
       throw new UnsupportedOperationException(s"${params.alg} in mode dense = ${params.denseData}")
@@ -387,9 +414,7 @@ object App extends Serializable with Logging {
     sc.setCheckpointDir(sparkCheckpointDir)
     
     val data = getLines(sc, params).map(parse)
-    
-    data.checkpoint
-    
+
     println(s"processing data points on ${data.partitions.length} partitions")
     
     val calcCost = new CostCalc(sc)

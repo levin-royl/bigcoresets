@@ -12,8 +12,8 @@ spark-submit \
 	--class streaming.coresets.App \
 	--master yarn \
 	--deploy-mode client \
-	--driver-memory 4G \
-	--executor-memory 4G \
+	--driver-memory 10G \
+	--executor-memory 10G \
 	--executor-cores 8 \
 	--num-executors 10 \
 	--conf spark.driver.maxResultSize=20g \
@@ -24,8 +24,8 @@ spark-submit \
 		-o hdfs:///user/spark/streaming-coreset-kmeans-out/artho.vec \
 		-a coreset-kmeans \
 		--dim 100000 \
-		--algorithmParams 100 \
+		--algorithmParams 10 \
 		--sampleSize 256 \
-		--batchSecs 100 \
+		--batchSecs 1200 \
 		--parallelism 800 \
 		-m streaming

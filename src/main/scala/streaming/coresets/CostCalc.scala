@@ -11,6 +11,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.RDD.doubleRDDToDoubleRDDFunctions
 
 import Domain._
+import GenUtil._
 
 class CostCalc(sc: SparkContext) extends Serializable {
   def rddName(path: Path): String = {
@@ -30,11 +31,7 @@ class CostCalc(sc: SparkContext) extends Serializable {
     println(s"indexing ${totalCount} points")
     
 //    val data = points.map(p => Vectors.dense(p.toWeightedDoublePoint.getPoint)) // .cache
-    val data = {
-      val d = points.map(_.toVector).zipWithIndex
-      d.checkpoint
-      d.cache
-    }
+    val data = points.map(_.toVector).zipWithIndex.materialize.cache
     
     println(s"path\tsampleSize\tnumPoints\ttotal\t#batch\tcost\tk\t|D|\tstats")
 

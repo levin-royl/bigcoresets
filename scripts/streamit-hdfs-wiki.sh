@@ -2,6 +2,9 @@
 
 #split -a5 -d -l 40000 wiki_vecs.txt wiki_vecs/wiki_vec
 
+sleep_time=$1
+echo sleep time = $sleep_time
+
 hadoop fs -rmr hdfs:///user/spark/tmp
 hadoop fs -mkdir hdfs:///user/spark/tmp
 hadoop fs -rmr hdfs:///user/spark/streamin
@@ -31,8 +34,8 @@ for f in ${files[@]}; do
 	echo took $delta milliseconds
 
 	if [ "$i" -ge "1" ]; then
-		echo "sleeping ..."
-		sleep 4500
+		echo "sleeping for $sleep_time seconds ..."
+		sleep $sleep_time
 		i=0
 	fi
 done

@@ -12,7 +12,7 @@ spark-submit \
 	--class streaming.coresets.App \
 	--master yarn \
 	--deploy-mode client \
-	--driver-memory 4G \
+	--driver-memory 8G \
 	--executor-memory 4G \
 	--executor-cores 8 \
 	--num-executors 10 \
@@ -26,6 +26,6 @@ spark-submit \
 		--dim 100000 \
 		--algorithmParams 100 \
 		--sampleSize 256 \
-		--batchSecs 100 \
-		--parallelism 800 \
+		--batchSecs 10800 \
+		--parallelism 8000 \
 		-m streaming

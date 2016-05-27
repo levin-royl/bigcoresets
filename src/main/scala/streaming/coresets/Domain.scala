@@ -113,7 +113,7 @@ object Domain {
 
     override def toVector: Vector = {
       // TODO:
-      val doPrints = Random.nextInt(100) == 0
+      val doPrints = Random.nextInt(10) == 0
       
       if (doPrints) 
         println(s"creating vector ...")
@@ -184,6 +184,12 @@ object Domain {
   }
   
   def parseSparse(line: String): WPoint = {
+    // TODO:
+    val doPrints = Random.nextInt(10) == 0
+    
+    if (doPrints) 
+      println(s"creating point ...")
+    
     val arr = line.split(' ')
     assert(arr.length >= 2 && arr.length%2 == 0, s"${arr.mkString(",")}")
 
@@ -198,6 +204,11 @@ object Domain {
       (index, value)
     })
 
-    WPoint.create(size, pairs)
+    val res = WPoint.create(size, pairs)
+    
+    if (doPrints) 
+      println(s"created point of size ${res.toSparseWeightableVector.getVector.getDimension}")
+      
+    res
   }
 }

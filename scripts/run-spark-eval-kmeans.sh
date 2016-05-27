@@ -1,5 +1,8 @@
 #!/bin/bash
 
+hadoop fs -rmr hdfs:///user/spark/checkpoint
+hadoop fs -mkdir hdfs:///user/spark/checkpoint
+
 #		-i socket://ir-cluster02.haifa.ibm.com:9999
 
 spark-submit --class streaming.coresets.App \
@@ -11,7 +14,7 @@ spark-submit --class streaming.coresets.App \
 	--num-executors 10 \
 	--conf spark.driver.maxResultSize=20g \
 	proj/bigcoresets/target/bigcoresets-1.0.jar \
-		--checkpointDir hdfs:///user/royl/checkpoint \
+		--checkpointDir hdfs:///user/spark/checkpoint \
 		-v \
 		-i hdfs:///user/spark/wiki_vecs.txt \
 		-o hdfs:///user/spark/streaming-coreset-kmeans-out \

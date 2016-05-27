@@ -112,15 +112,19 @@ object Domain {
     override def toSparseWeightableVector: SparseWeightableVector = inner
 
     override def toVector: Vector = {
+      // TODO:
+      val doPrints = Random.nextInt(100) == 0
+      
+      if (doPrints) 
+        println(s"creating vector ...")
+      
       val res = Vectors.sparse(
           inner.getDimension, 
           inner.iterator.asScala.map(ent => (ent.getIndex, ent.getValue)).toSeq
       )
       
-      // TODO:
-      if (Random.nextInt(100) == 0) {
+      if (doPrints) 
         println(s"created vector of size ${res.size} with ${res.toSparse.numNonzeros} non-zeros")
-      }
       
       res
     }

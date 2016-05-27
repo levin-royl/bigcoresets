@@ -183,7 +183,8 @@ object App extends Serializable with Logging {
       throw new RuntimeException(s"unknown algorithm ${alg}")
     }
   }
-  
+
+  // this method return a 'method' that applies the in-memory algorithm (kmeans, SVD, etc.)
   def createOnCoresetAlg(params: Params): (Iterable[WPoint] => Array[Vector]) = {
     def denseCoresetKmeans(data: Iterable[WPoint]): Array[Vector] = {
       mylog(s"running denseCoresetKmeans on ${data.size} points")

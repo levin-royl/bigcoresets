@@ -7,6 +7,7 @@ import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.linalg.Vectors
 import scala.collection.JavaConverters._
 import java.util.HashMap
+import scala.util.Random
 
 object Domain {
   case class ComputedResult(
@@ -115,6 +116,11 @@ object Domain {
           inner.getDimension, 
           inner.iterator.asScala.map(ent => (ent.getIndex, ent.getValue)).toSeq
       )
+      
+      // TODO:
+      if (Random.nextInt(100) == 0) {
+        println(s"created vector of size ${res.size} with ${res.toSparse.numNonzeros} non-zeros")
+      }
       
       res
     }

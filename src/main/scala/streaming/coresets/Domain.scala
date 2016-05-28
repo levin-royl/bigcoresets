@@ -112,19 +112,13 @@ object Domain {
     override def toSparseWeightableVector: SparseWeightableVector = inner
 
     override def toVector: Vector = {
-      // TODO:
-      val doPrints = Random.nextInt(10) == 0
-      
-      if (doPrints) 
-        println(s"creating vector ...")
-      
       val res = Vectors.sparse(
           inner.getDimension, 
-          inner.iterator.asScala.map(ent => (ent.getIndex, ent.getValue)).toSeq
+          inner.sparseIterator.asScala.map(ent => {
+            assert(ent.getIndex > 0)
+            (ent.getIndex, ent.getValue)
+          }).toSeq
       )
-      
-      if (doPrints) 
-        println(s"created vector of size ${res.size} with ${res.toSparse.numNonzeros} non-zeros")
       
       res
     }
@@ -184,12 +178,6 @@ object Domain {
   }
   
   def parseSparse(line: String): WPoint = {
-    // TODO:
-    val doPrints = Random.nextInt(10) == 0
-    
-    if (doPrints) 
-      println(s"creating point ...")
-    
     val arr = line.split(' ')
     assert(arr.length >= 2 && arr.length%2 == 0, s"${arr.mkString(",")}")
 
@@ -206,9 +194,6 @@ object Domain {
 
     val res = WPoint.create(size, pairs)
     
-    if (doPrints) 
-      println(s"created point of size ${res.toSparseWeightableVector.getVector.getDimension}")
-      
     res
   }
 }

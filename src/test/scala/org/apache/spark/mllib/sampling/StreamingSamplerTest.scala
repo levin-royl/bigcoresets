@@ -1,13 +1,12 @@
 package org.apache.spark.mllib.sampling
 
+import org.apache.spark.mllib.sampling.RDDLike.rddLikeToPairRDDLikeFunctions
+import org.apache.spark.rdd.RDD.rddToPairRDDFunctions
 import org.junit.Assert._
 import org.junit.Test
-import org.apache.spark.rdd.RDD
-import org.apache.spark.SparkConf
-import org.apache.spark.SparkContext
 
-import TestUtils._
-import SparkTestConf._
+import SparkTestConf.sc
+import TestUtils.TestHelperRDDLike
 
 class StreamingSamplerTest {
   val sampler = new TreeSampler(SamplerConfig(2, 5, true), new TestSampleTaker)

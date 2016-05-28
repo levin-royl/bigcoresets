@@ -10,8 +10,9 @@ object GenUtil {
       val sc = rdd.sparkContext
       require(sc.getCheckpointDir.isDefined)
       val path = sc.getCheckpointDir.get
-      rdd.saveAsObjectFile(s"${path}/checkpoint-rdd-${UUID.randomUUID.toString}")
-      sc.objectFile[T](path)
+      val rddPath = s"${path}/checkpoint-rdd-${UUID.randomUUID.toString}"
+      rdd.saveAsObjectFile(rddPath)
+      sc.objectFile[T](rddPath)
     }
   }
 }

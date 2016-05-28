@@ -4,7 +4,8 @@ hadoop fs -rmr hdfs:///user/spark/checkpoint
 hadoop fs -mkdir hdfs:///user/spark/checkpoint
 
 #		-i socket://ir-cluster02.haifa.ibm.com:9999
-
+#		-i hdfs:///user/spark/wiki_vecs.txt \
+	
 spark-submit --class streaming.coresets.App \
 	--master yarn \
 	--deploy-mode client \
@@ -16,7 +17,7 @@ spark-submit --class streaming.coresets.App \
 	proj/bigcoresets/target/bigcoresets-1.0.jar \
 		--checkpointDir hdfs:///user/spark/checkpoint \
 		-v \
-		-i hdfs:///user/spark/wiki_vecs.txt \
+		-i s3://aws-logs-773707194450-eu-west-1/elasticmapreduce/wiki_vecs.txt \
 		-o hdfs:///user/spark/streaming-coreset-kmeans-out \
 		-a coreset-kmeans \
 		--dim 100000 \

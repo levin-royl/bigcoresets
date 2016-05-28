@@ -115,7 +115,6 @@ object Domain {
       val res = Vectors.sparse(
           inner.getDimension, 
           inner.sparseIterator.asScala.map(ent => {
-            assert(ent.getIndex > 0)
             (ent.getIndex, ent.getValue)
           }).toSeq
       )

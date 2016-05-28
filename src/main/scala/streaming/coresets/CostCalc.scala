@@ -27,12 +27,15 @@ class CostCalc(sc: SparkContext) extends Serializable {
     
     val totalCount = points.count
     var totalNumPoints = 0L
-
-    println(s"indexing ${totalCount} points")
     
+    println(s"converting ${totalCount} points to vectors")
+    val dataAsVectors = points.map(_.toVector).materialize
+    println(s"done converting points to vectors")
+    
+    println(s"indexing ${totalCount} vectors")
 //    val data = points.map(p => Vectors.dense(p.toWeightedDoublePoint.getPoint)) // .cache
-    val data = points.map(_.toVector).materialize.zipWithIndex.materialize.cache
-    
+    val data = dataAsVectors.zipWithIndex.materialize.cache
+
     println(s"path\tsampleSize\tnumPoints\ttotal\t#batch\tcost\tk\t|D|\tstats")
 
     val fs = FileSystem.get(sc.hadoopConfiguration)

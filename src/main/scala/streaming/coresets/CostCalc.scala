@@ -39,7 +39,10 @@ class CostCalc(sc: SparkContext) extends Serializable {
     println(s"path\tsampleSize\tnumPoints\ttotal\t#batch\tcost\tk\t|D|\tstats")
 
     val fs = FileSystem.get(sc.hadoopConfiguration)
-    val resultsPaths = fs.listStatus(new Path(pathToResults)).map(_.getPath)
+    val resultsPaths = fs.listStatus(new Path(pathToResults))
+      .map(_.getPath)
+      .filter(p => fs.listFiles(p, false).hasNext)
+      
     var i = 1
     
     for (path <- resultsPaths) {

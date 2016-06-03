@@ -12,8 +12,8 @@ spark-submit \
 	--class streaming.coresets.App \
 	--master yarn \
 	--deploy-mode client \
-	--driver-memory 4G \
-	--executor-memory 4G \
+	--driver-memory 10G \
+	--executor-memory 10G \
 	--executor-cores 8 \
 	--num-executors 10 \
 	--conf spark.driver.maxResultSize=20g \

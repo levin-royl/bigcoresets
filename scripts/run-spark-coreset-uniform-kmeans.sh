@@ -24,8 +24,8 @@ spark-submit \
 		-o hdfs:///user/spark/streaming-coreset-uniform-kmeans-out/artho.vec \
 		-a coreset-uniform-kmeans \
 		--dim 100000 \
-		--algorithmParams 100 \
+		--algorithmParams 10 \
 		--sampleSize 256 \
-		--batchSecs 100 \
+		--batchSecs 1200 \
 		--parallelism 800 \
 		-m streaming

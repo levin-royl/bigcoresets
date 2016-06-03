@@ -250,10 +250,10 @@ object App extends Serializable with Logging {
       axis
     }
     
-    if ("coreset-kmeans" == params.alg) {
+    if ("coreset-kmeans" == params.alg || "coreset-uniform-kmeans" == params.alg) {
       if (params.denseData) denseCoresetKmeans else sparseCoresetKmeans
     }
-    else if ("coreset-kmeans" == params.alg && !params.denseData) {
+    else if (("coreset-svd" == params.alg || "coreset-uniform-svd" == params.alg)&& !params.denseData) {
       sparseCoresetSVD
     }
     else {

@@ -1,5 +1,7 @@
 #!/bin/bash
 
+outName=$1
+
 hadoop fs -rmr hdfs:///user/spark/checkpoint
 hadoop fs -mkdir hdfs:///user/spark/checkpoint
 
@@ -18,7 +20,7 @@ spark-submit --class streaming.coresets.App \
 		--checkpointDir hdfs:///user/spark/checkpoint \
 		-v \
 		-i s3://aws-logs-773707194450-eu-west-1/elasticmapreduce/wiki_vecs.txt \
-		-o hdfs:///user/spark/streaming-coreset-kmeans-out \
+		-o hdfs:///user/spark/$outName \
 		-a coreset-kmeans \
 		--dim 100000 \
 		--algorithmParams 10 \

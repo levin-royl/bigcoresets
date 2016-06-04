@@ -24,7 +24,7 @@ spark-submit \
 		-o hdfs:///user/spark/streaming-spark-kmeans-out/artho.vec \
 		-a spark-kmeans \
 		--dim 100000 \
-		--algorithmParams 100 \
+		--algorithmParams 10 \
 		--sampleSize 256 \
 		--batchSecs 10000 \
 		--parallelism 8000 \

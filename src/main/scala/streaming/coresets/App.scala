@@ -380,8 +380,8 @@ object App extends Serializable with Logging {
     }
   }
   
-  private def getLines(ssc: StreamingContext, params: Params): DStream[String] = {
-    val lines: DStream[String] = if (params.input.startsWith("socket://")) {
+  private def getLines(ssc: StreamingContext, params: Params, msg: String = null): DStream[String] = {
+    val lines$: DStream[String] = if (params.input.startsWith("socket://")) {
       val hostport = params.input.substring("socket://".length).split(':')
       require(hostport.length == 2)
       val hostname = hostport(0)
@@ -391,6 +391,8 @@ object App extends Serializable with Logging {
     else {
       ssc.textFileStream(params.input)
     }
+    
+    val lines = if (msg != null) lines$.map(reportAndGet(msg)) else lines$
     
     if (params.parallelism.isDefined) {
       lines.repartition(params.parallelism.get)
@@ -500,6 +502,11 @@ object App extends Serializable with Logging {
       )
     }
   }
+
+  private def reportAndGet[T](msg: String)(elm: T) = {
+    mylog(msg);
+    elm
+  }
   
   def testStreaming(params: Params): Unit = {
     val sparkCheckpointDir = params.checkpointDir
@@ -528,13 +535,8 @@ object App extends Serializable with Logging {
 
     def parse = if (params.denseData) parseDense _ else parseSparse _
     
-    def reportAndGet[T](msg: String)(elm: T) = {
-      mylog(msg);
-      elm
-    }
-
-    val data = getLines(ssc, params)
-      .map(reportAndGet(s"reading from dstream ..."))
+    val data = getLines(ssc, params, "stream reading begun ...")
+      .map(reportAndGet(s"now reading ..."))
       .map(parse)
       .cache
 

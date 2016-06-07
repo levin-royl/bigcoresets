@@ -533,16 +533,24 @@ object App extends Serializable with Logging {
     val fileoutExt = getFileExt(params.output)
     val filename = params.output.substring(0, params.output.length - fileoutExt.length)
     
-    val computedResults: DStream[ComputedResult] = if (params.alg.startsWith("coreset")) {
-      val alg = createOnCoresetAlg(params)
-      def processSample = makeProcessSample(alg, params.alg)
+    val computedResults: DStream[ComputedResult] = {
+      val before = System.currentTimeMillis
+      mylog("reading from dstream ...")
       
-      sampler.sample(data, processSample)
-    } 
-    else {
-      val alg = createSparkAlg(params)
+      val dres = if (params.alg.startsWith("coreset")) {
+        val alg = createOnCoresetAlg(params)
+        def processSample = makeProcessSample(alg, params.alg)
+        
+        sampler.sample(data, processSample)
+      } 
+      else {
+        val alg = createSparkAlg(params)
+        
+        data.transform(alg)
+      }
       
-      data.transform(alg)
+      mylog(s"sleeping after working for ${(System.currentTimeMillis - before)/1000L} seconds ...")
+      dres
     }
     
     computedResults.filter(_.numPoints > 0).saveAsObjectFiles(filename, fileoutExt)

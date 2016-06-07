@@ -528,15 +528,20 @@ object App extends Serializable with Logging {
 
     def parse = if (params.denseData) parseDense _ else parseSparse _
     
-    val data = getLines(ssc, params).map(parse).cache
+    def reportAndGet[T](msg: String)(elm: T) = {
+      mylog(msg);
+      elm
+    }
+
+    val data = getLines(ssc, params)
+      .map(reportAndGet(s"reading from dstream ..."))
+      .map(parse)
+      .cache
 
     val fileoutExt = getFileExt(params.output)
     val filename = params.output.substring(0, params.output.length - fileoutExt.length)
     
     val computedResults: DStream[ComputedResult] = {
-      val before = System.currentTimeMillis
-      mylog("reading from dstream ...")
-      
       val dres = if (params.alg.startsWith("coreset")) {
         val alg = createOnCoresetAlg(params)
         def processSample = makeProcessSample(alg, params.alg)
@@ -549,12 +554,13 @@ object App extends Serializable with Logging {
         data.transform(alg)
       }
       
-      mylog(s"sleeping after working for ${(System.currentTimeMillis - before)/1000L} seconds ...")
       dres
     }
     
-    computedResults.filter(_.numPoints > 0).saveAsObjectFiles(filename, fileoutExt)
+    computedResults.map(reportAndGet("almost done ...")).filter(_.numPoints > 0)
+      .saveAsObjectFiles(filename, fileoutExt)
 
+/*
     val sumInWin = computedResults.map(_.numPoints).reduceByWindow(
         reduceFunc = _ + _, 
         invReduceFunc = _ - _, 
@@ -570,7 +576,7 @@ object App extends Serializable with Logging {
         System.exit(0)
       }
     })
-    
+*/    
     
     mylog("now!")
     Thread.sleep(60000L)

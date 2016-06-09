@@ -527,6 +527,8 @@ object App extends Serializable with Logging {
     ssc.checkpoint(sparkCheckpointDir)
     ssc.remember(Milliseconds(lookBacktime))
     
+    mylog(s"set time-to-remember to ${lookBacktime/1000L} seconds")
+    
     val sampler = new StreamingTreeSampler[WPoint](
         SamplerConfig(numNodesToSample, params.sampleSize, params.localRDDs),
         new MySampleTaker(createCoresetAlg(params)),

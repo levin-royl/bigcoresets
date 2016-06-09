@@ -414,33 +414,40 @@ class StreamingTreeSampler[T](
     val ssc = dstream.context
 //    ssc.remember(Seconds(batchSecs*2))
 
+    var prevRddRes: RDD[RT] = null
     var stateTreeSample: RDDLike[(Layer, SampleContainer[T])] = null
+    
     val treeSampler = new TreeSampler[T](config, sampleTaker)
 
     dstream.transform(rdd => {
       val before = System.currentTimeMillis
 
-      val origNumPartitions = rdd.partitions.length
-      val currFlatTreeSample = config.createRDDLike(treeSampler.flatTreeSample(rdd))
-      val nextRawTreeSample = if (stateTreeSample != null) {
-        stateTreeSample.union(currFlatTreeSample).repartition(origNumPartitions)
-      } else currFlatTreeSample
+      val rdyRDD: RDD[RT] = if (!rdd.isEmpty) {
+        val origNumPartitions = rdd.partitions.length
+        val currFlatTreeSample = config.createRDDLike(treeSampler.flatTreeSample(rdd))
+        val nextRawTreeSample = if (stateTreeSample != null) {
+          stateTreeSample.union(currFlatTreeSample).repartition(origNumPartitions)
+        } else currFlatTreeSample
+        
+        val currTreeSample = treeSampler.treeSample(nextRawTreeSample).repartition(origNumPartitions)
+        
+        currTreeSample.checkpoint
+        val cachedCurrTreeSample = currTreeSample.cache
+        stateTreeSample = cachedCurrTreeSample
+  
+        val res = processSample(rdd, treeSampler.sampleFromTreeToRDD(cachedCurrTreeSample))
+  
+        RDDLike.toRDD(res, rdd.sparkContext)
+      }
+      else if (prevRddRes == null) {
+        rdd.sparkContext.emptyRDD
+      }
+      else prevRddRes
       
-      val currTreeSample = treeSampler.treeSample(nextRawTreeSample).repartition(origNumPartitions)
-      
-      currTreeSample.checkpoint
-      val cachedCurrTreeSample = currTreeSample.cache
-      stateTreeSample = cachedCurrTreeSample
-
-      val res = processSample(rdd, treeSampler.sampleFromTreeToRDD(cachedCurrTreeSample))
-
       val deltaT = System.currentTimeMillis - before
-
-//      require(deltaT < 1000L*batchSecs, s"$deltaT")
-      
-      val rdyRDD: RDD[RT] = RDDLike.toRDD(res, rdd.sparkContext)
-      
       info(s"stream processing duration is $deltaT ms")
+      
+      prevRddRes = rdyRDD
       
       rdyRDD
     })

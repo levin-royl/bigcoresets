@@ -194,7 +194,7 @@ object App extends Serializable with Logging {
     
       val sample = data.map(_.toWeightedDoublePoint).toList.asJava
       
-      mylog(s"got sample of size ${sample.size}")
+      mylog(s"got sample of size ${sample.size}, now applying in-mem algorithm ${kmeansAlg.getClass}")
       
       val centroids = kmeansAlg.cluster(sample).asScala.map(c => 
         Vectors.dense(c.getCenter.getPoint)
@@ -213,7 +213,7 @@ object App extends Serializable with Logging {
     
       val sample = data.map(_.toSparseWeightableVector).toList.asJava
       
-      mylog(s"got sample of size ${sample.size}")
+      mylog(s"got sample of size ${sample.size}, now applying in-mem algorithm ${kmeansAlg.getClass}")
       
       val centroids = kmeansAlg.cluster(sample).asScala.map(c => 
         Vectors.sparse(
@@ -236,7 +236,7 @@ object App extends Serializable with Logging {
     
       val sample = data.map(_.toSparseWeightableVector).toList.asJava
       
-      mylog(s"got sample of size ${sample.size}")
+      mylog(s"got sample of size ${sample.size}, now applying in-mem algorithm ${svdAlg.getClass}")
       
       val axis = svdAlg.cluster(sample).asScala.map(c => 
         Vectors.sparse(

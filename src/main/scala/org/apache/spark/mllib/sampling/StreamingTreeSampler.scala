@@ -13,7 +13,7 @@ object GenUtil extends Logging {
   def mylog(msg: String): Unit = {
     val txt = s"${new java.util.Date} --- $msg"
     println(txt)
-    logWarning(txt)
+//    logWarning(txt)
   }
 }
 

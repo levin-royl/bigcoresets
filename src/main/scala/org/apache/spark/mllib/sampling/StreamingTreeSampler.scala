@@ -9,9 +9,11 @@ import org.apache.spark.Logging
 
 import scala.collection.mutable.HashMap
 
-object GenUtil {
+object GenUtil extends Logging {
   def mylog(msg: String): Unit = {
-    println(s"${new java.util.Date} --- $msg")
+    val txt = s"${new java.util.Date} --- $msg"
+    println(txt)
+    logWarning(txt)
   }
 }
 

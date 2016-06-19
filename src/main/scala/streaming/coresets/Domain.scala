@@ -79,6 +79,8 @@ object Domain {
     
     def toVector: Vector
     
+    override def toString: String = toVector.toString
+    
     override def hashCode(): Int = toVector.hashCode
     
     override def equals(other: Any): Boolean = {

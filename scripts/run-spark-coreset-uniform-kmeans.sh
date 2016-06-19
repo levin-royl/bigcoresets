@@ -26,6 +26,6 @@ spark-submit \
 		--dim 100000 \
 		--algorithmParams 10 \
 		--sampleSize 256 \
-		--batchSecs 1200 \
+		--batchSecs 400 \
 		--parallelism 800 \
 		-m streaming

@@ -9,7 +9,8 @@ then
 	echo Installing Maven
 	rm -rf apache-maven-3.3.9-bin.tar.gz
 	rm -rf apache-maven-3.3.9
-	wget http://apache.mivzakim.net/maven/maven-3/3.3.9/binaries/apache-maven-3.3.9-bin.tar.gz
+	wget http://apache.mirror.anlx.net/maven/maven-3/3.3.9/binaries/apache-maven-3.3.9-bin.tar.gz
+#	wget http://apache.mivzakim.net/maven/maven-3/3.3.9/binaries/apache-maven-3.3.9-bin.tar.gz
 	tar xzvf apache-maven-3.3.9-bin.tar.gz
 	rm -rf apache-maven-3.3.9-bin.tar.gz
 	sudo rm -rf /opt/apache-maven-3.3.9

@@ -81,6 +81,7 @@ class BaseCoresetAlgorithm(
   }
 }
 
+/*
 object Timer {
   var startTime: Long = -1L
 
@@ -88,28 +89,32 @@ object Timer {
   
   val timer: AtomicLong = new AtomicLong(0L)
 }
+*/
 
 class MySampleTaker(alg: BaseCoresetAlgorithm) extends SampleTaker[WPoint] with Logging {
   override def take(oelms: Iterable[WPoint], sampleSize: Int): Iterable[WPoint] = {
+    val before = System.currentTimeMillis
+    
     val elms = oelms // .map(_.toWeightedDoublePoint)
     
     val res = if (elms.size > sampleSize) {
-      val before = if (Timer.numThreads > 0) System.nanoTime else 0L
+//      val before = if (Timer.numThreads > 0) System.nanoTime else 0L
       
       val rr = alg.takeSample(elms)
 
       // TODO: debug
 //      println(s"pre-sample size = ${elms.size} and post-sample size = ${rr.size}")
       
-      if (Timer.numThreads > 0) {
-        Timer.timer.addAndGet(System.nanoTime - before)
-      }
+//      if (Timer.numThreads > 0) {
+//        Timer.timer.addAndGet(System.nanoTime - before)
+//      }
       
       require(rr.size <= sampleSize, s"requested sample size ${sampleSize} but got ${rr.size}")
       rr
     }
     else elms
-    
+
+/*    
     if (Timer.numThreads > 0 && Random.nextInt(10) == 0) {
       val s = 1000L*1000L*1000L
       val numCPUs = Timer.numThreads
@@ -119,7 +124,9 @@ class MySampleTaker(alg: BaseCoresetAlgorithm) extends SampleTaker[WPoint] with 
       
       mylog(s"${new Date} sampling total CPU[${numCPUs}] time is ${samplingTime}/${totalTime} seconds which is ${100.0*ratio}%")
     }
+*/
 
+    println(s"ran sampling on node: ${getHostName} (took ${(System.currentTimeMillis - before)} ms)")
     res // .map(p => WPoint.create(p))
   }
 
@@ -329,12 +336,13 @@ object App extends Serializable with Logging {
   def main(args: Array[String]) {    
     mylog("starting up ...")
     
-    Timer.startTime = System.nanoTime
+//    Timer.startTime = System.nanoTime
     
     val before = System.currentTimeMillis
     
     val params = cli(args)
     
+/*    
     Timer.numThreads = if (params.generateProfile) {
       require(params.sparkParams.contains("spark.master"))
       
@@ -342,7 +350,8 @@ object App extends Serializable with Logging {
         .substring("local[".length).replace("]", "").toInt
     }
     else -1
-
+*/
+    
     params.mode.toLowerCase.trim match {
       case "bulk" => testBulk(params)
       case "streaming" => testStreaming(params)

@@ -323,12 +323,16 @@ class TreeSampler[T](
   
   private[sampling] 
   def sampleFromTreeToRDD(rdd: RDDLike[(Layer, SampleContainer[T])]): RDDLike[T] = {
+    new RDDLikeIterable(sampleTaker.take(rdd.values.flatMap(_.sample).collect, config.sampleSize))
+
+/*    
     val elms = rdd.flatMap{ case(_, sc) => sc.sample }
       .zipWithIndex.map{ case(elm, id) => (id.toInt, elm) }
-
+      
     val ids = new RDDLikeIterable(sampleTaker.takeIds(elms.collect, config.sampleSize)).zipWithIndex
 
     ids.join(elms).values.sortBy(_._1).values
+*/
   }
   
   private[sampling] 

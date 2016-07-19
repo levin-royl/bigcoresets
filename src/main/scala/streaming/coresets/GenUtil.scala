@@ -5,6 +5,15 @@ import scala.reflect.ClassTag
 import java.util.UUID
 
 object GenUtil {
+  def getHostName(): Option[String] = {
+    try {
+      Some(java.net.InetAddress.getLocalHost.getHostName)
+    }
+    catch {
+      case _: java.net.UnknownHostException => Option.empty
+    }
+  }
+  
   implicit class RDDHelper[T: ClassTag](rdd: RDD[T]) {
     def materialize(): RDD[T] = {
       val sc = rdd.sparkContext

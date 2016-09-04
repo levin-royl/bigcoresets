@@ -27,15 +27,15 @@ import univ.ml.SVDCoreset
 import univ.ml.WeightedDoublePoint
 import univ.ml.WeightedKMeansPlusPlusClusterer
 import univ.ml.sparse.SparseWeightableVector
-import univ.ml.sparse.algorithm.SparseCoresetAlgorithm
+import univ.ml.sparse.algorithm._
 import univ.ml.sparse.SparseSVDCoreset
-import univ.ml.sparse.algorithm.SparseNonUniformCoreset
-import univ.ml.sparse.SparseWeightedKMeansPlusPlus
 import java.util.concurrent.atomic.AtomicLong
+
 import scala.util.Random
 import java.util.concurrent.ConcurrentHashMap
 import java.util.Date
 import java.util.concurrent.atomic.AtomicInteger
+
 import org.apache.spark.Logging
 import org.apache.spark.Logging
 import org.apache.spark.mllib.sampling.RDDLike
@@ -44,7 +44,6 @@ import org.apache.spark.mllib.sampling.RDDLikeIterable
 import org.apache.spark.mllib.sampling.GenUtil._
 import org.apache.spark.streaming.Milliseconds
 import univ.ml.UniformCoreset
-import univ.ml.sparse.algorithm.SparseUniformCoreset
 
 object MySampleTaker extends Serializable with Logging {
   val numNodesToSample = 2
@@ -176,7 +175,7 @@ object App extends Serializable with Logging {
       else {
         if (!a.contains("uniform")) {
           new BaseCoresetAlgorithm(
-              sparseAlg = Some(new SparseNonUniformCoreset(algParams.toInt, sampleSize))
+              sparseAlg = Some(new SparseNonUniformCoreset(new KMeansPlusPlusSeed(algParams.toInt), sampleSize))
           )
         }
         else {

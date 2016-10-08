@@ -28,7 +28,7 @@ cd proj
 
 git clone https://github.com/C0rWin/Java-KMeans-Coreset.git
 cd Java-KMeans-Coreset
-mvn clean install
+mvn clean install -DskipTests
 cd ..
 
 git clone https://github.com/levin-royl/bigcoresets.git

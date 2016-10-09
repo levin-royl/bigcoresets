@@ -147,7 +147,7 @@ object App extends Serializable with Logging {
     
     val a = alg.toLowerCase.trim 
     
-    if (a.endsWith("svd")) {
+    val coresetAlg = if (a.endsWith("svd")) {
       if (dense) {
         new BaseCoresetAlgorithm(
             denseAlg = Some(new SVDCoreset(algParams.toInt, sampleSize))
@@ -188,6 +188,10 @@ object App extends Serializable with Logging {
     else { 
       throw new RuntimeException(s"unknown algorithm ${alg}")
     }
+    
+    println(s"createCoresetAlg created instance of: ${coresetAlg.getClass}")
+    
+    coresetAlg
   }
 
   // this method return a 'method' that applies the in-memory algorithm (kmeans, SVD, etc.)

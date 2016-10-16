@@ -1,10 +1,11 @@
 #!/bin/bash
 
-#./run-spark.sh wasb://contmsspark@samsspark.blob.core.windows.net/coreset/streamin wasb://contmsspark@samsspark.blob.core.windows.net/coreset/streaming-coreset-kmeans-out wasb://contmsspark@samsspark.blob.core.windows.net/coreset/checkpoint
+#./run-spark.sh wasb://contmsspark@samsspark.blob.core.windows.net/coreset/streamin wasb://contmsspark@samsspark.blob.core.windows.net/coreset/streaming-coreset-kmeans-out wasb://contmsspark@samsspark.blob.core.windows.net/coreset/checkpoint coreset-kmeans
 
 fromPath=$1
 toPath=$2
 checkpointPath=$3
+alg=$4
 
 toPath=$2
 tmpPath=$3
@@ -30,7 +31,7 @@ spark-submit \
 		-v \
 		-i $fromPath \
 		-o $toPath/artho.vec \
-		-a coreset-kmeans \
+		-a $alg \
 		--dim 100000 \
 		--algorithmParams 10 \
 		--sampleSize 256 \

@@ -174,7 +174,12 @@ object App extends Serializable with Logging {
       }
       else {
         if (!a.contains("uniform")) {
-          new BaseCoresetAlgorithm(
+          if (a.contains("coreset2")) {
+            new BaseCoresetAlgorithm(
+                sparseAlg = Some(new SparseKmeansCoresetAlgorithm(sampleSize))
+            )
+          }
+          else new BaseCoresetAlgorithm(
               sparseAlg = Some(new SparseNonUniformCoreset(new KMeansPlusPlusSeed(algParams.toInt), sampleSize))
           )
         }
@@ -260,7 +265,7 @@ object App extends Serializable with Logging {
       axis
     }
     
-    if ("coreset-kmeans" == params.alg || "coreset-uniform-kmeans" == params.alg) {
+    if ("coreset-kmeans" == params.alg || "coreset2-kmeans" == params.alg || "coreset-uniform-kmeans" == params.alg) {
       if (params.denseData) denseCoresetKmeans else sparseCoresetKmeans
     }
     else if (("coreset-svd" == params.alg || "coreset-uniform-svd" == params.alg)&& !params.denseData) {

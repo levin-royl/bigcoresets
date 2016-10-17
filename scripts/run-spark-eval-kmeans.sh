@@ -20,7 +20,7 @@ spark-submit --class streaming.coresets.App \
 		--checkpointDir hdfs:///user/spark/checkpoint \
 		-v \
 		-i s3://aws-logs-773707194450-eu-west-1/elasticmapreduce/wiki_vecs.txt \
-		-o $path \
+		-o $path \.
 		-a coreset-kmeans \
 		--dim 100000 \
 		--algorithmParams 10 \

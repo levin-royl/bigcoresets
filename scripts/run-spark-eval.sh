@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#./run-spark.sh wasb://contmsspark@samsspark.blob.core.windows.net/coreset/streamin wasb://contmsspark@samsspark.blob.core.windows.net/coreset/streaming-coreset-kmeans-out wasb://contmsspark@samsspark.blob.core.windows.net/coreset/checkpoint coreset-kmeans
+#./run-spark-eval.sh wasb://contmsspark@samsspark.blob.core.windows.net/coreset/wiki_vecs wasb://contmsspark@samsspark.blob.core.windows.net/coreset/streaming-coreset-kmeans-out wasb://contmsspark@samsspark.blob.core.windows.net/coreset/checkpoint coreset-kmeans
 
 fromPath=$1
 toPath=$2
@@ -37,4 +37,4 @@ spark-submit \
 		--sampleSize 256 \
 		--batchSecs 300 \
 		--parallelism 520 \
-		-m streaming
+		-m evaluate

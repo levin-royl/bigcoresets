@@ -33,8 +33,8 @@ spark-submit \
 		-o $toPath/artho.vec \
 		-a $alg \
 		--dim 100000 \
-		--algorithmParams 10 \
-		--sampleSize 256 \
+		--algorithmParams 30 \
+		--sampleSize 125 \
 		--batchSecs 300 \
 		--parallelism 520 \
 		-m streaming

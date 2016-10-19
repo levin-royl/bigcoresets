@@ -14,9 +14,6 @@ listenPath=$4
 hadoop fs -rmr $checkpointPath
 hadoop fs -mkdir $checkpointPath
 
-hadoop fs -rmr $toPath
-hadoop fs -mkdir $toPath
-
 spark-submit \
 	--class streaming.coresets.App \
 	--master yarn \
@@ -30,7 +27,7 @@ spark-submit \
 		--checkpointDir $checkpointPath \
 		-v \
 		-i $fromPath \
-		-o $toPath/artho.vec \
+		-o $toPath \
 		-a $alg \
 		--dim 100000 \
 		--algorithmParams 10 \

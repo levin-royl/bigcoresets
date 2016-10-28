@@ -567,7 +567,9 @@ object App extends Serializable with Logging {
         val alg = createOnCoresetAlg(params)
         def processSample = makeProcessSample(alg, params.alg)
         
-        sampler.sample(data, processSample)
+        val r = sampler.sample(data, processSample)
+        
+        r
       } 
       else {
         val alg = createSparkAlg(params)
@@ -578,7 +580,7 @@ object App extends Serializable with Logging {
       dres
     }
     
-    computedResults.map(reportAndGet("almost done ...")).filter(_.numPoints > 0)
+    computedResults.map(reportAndGet("almost done ...")).filter(_.numPoints > 0).repartition(1)
       .saveAsObjectFiles(filename, fileoutExt)
 
 /*

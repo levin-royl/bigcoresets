@@ -7,6 +7,13 @@ import org.junit.Test
 
 import SparkTestConf.sc
 import TestUtils.TestHelperRDDLike
+import streaming.coresets.BaseCoresetAlgorithm
+import univ.ml.NonUniformCoreset
+import univ.ml.WeightedDoublePoint
+import streaming.coresets.Domain.WPoint
+import streaming.coresets.MySampleTaker
+import scala.util.Random
+import univ.ml.sparse.algorithm.SparseKmeansCoresetAlgorithm
 
 class StreamingSamplerTest {
   val sampler = new TreeSampler(SamplerConfig(2, 5, true), new TestSampleTaker)
@@ -14,6 +21,60 @@ class StreamingSamplerTest {
   val rdd = sc.makeRDD(0 until 110, 11)
   assertEquals(11, rdd.partitions.length)
 
+  @Test
+  def testKMeansBulk(): Unit = {
+    val k = 3
+    val sampleSize = 3
+    
+    val st = new BaseCoresetAlgorithm(
+        denseAlg = Some(new NonUniformCoreset[WeightedDoublePoint](k, sampleSize))
+    )
+    
+    val sampler = new TreeSampler[WPoint](
+      SamplerConfig(2, sampleSize, true),
+      new MySampleTaker(st)
+    )
+    
+    val r = new Random
+    
+    val lows = sc.makeRDD((0 until 1000).map(i => -100000 - r.nextInt(100)))
+    val mids = sc.makeRDD((0 until 1000).map(i => r.nextInt(100)))
+    val highs = sc.makeRDD((0 until 1000).map(i => 100000 + r.nextInt(100)))
+    val rdd = lows.union(mids).union(highs).map(i => WPoint.create(Array[Double](i)))
+
+    val res = sampler.sample(rdd)
+    
+    println(s"testKMeansBulk")
+    res.foreach(println)
+  }
+  
+  @Test
+  def testKMeansCoresetBulk(): Unit = {
+    val k = 3
+    val sampleSize = 3
+    
+    val st = new BaseCoresetAlgorithm(
+        sparseAlg = Some(new SparseKmeansCoresetAlgorithm(sampleSize))
+    )
+    
+    val sampler = new TreeSampler[WPoint](
+      SamplerConfig(2, sampleSize, true),
+      new MySampleTaker(st)
+    )
+    
+    val r = new Random
+    
+    val lows = sc.makeRDD((0 until 1000).map(i => -100000 - r.nextInt(100)))
+    val mids = sc.makeRDD((0 until 1000).map(i => r.nextInt(100)))
+    val highs = sc.makeRDD((0 until 1000).map(i => 100000 + r.nextInt(100)))
+    val rdd = lows.union(mids).union(highs).map(i => WPoint.create(1, Seq((0, i.toDouble))))
+
+    val res = sampler.sample(rdd)
+    
+    println(s"testKMeansCoresetBulk")
+    res.foreach(println)
+  }
+  
   @Test
   def testFlatSample(): Unit = {
     val flatSample = sampler.flatTreeSample(rdd)

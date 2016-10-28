@@ -195,6 +195,8 @@ object Domain {
 
     val res = WPoint.create(size, pairs)
     
+    Array(s"").mkString(",")
+    
     res
   }
 }
